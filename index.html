@@ -1,0 +1,1107 @@
+﻿<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notes</title>
+  <meta name="description" content="A private notebook in your browser — rich text, folders, search, autosave and export." />
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script>
+    try {
+      var t = localStorage.getItem('notes:theme');
+      if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+  <noscript>
+    <style>
+      .intro { display: none !important; }
+      body.intro-open { overflow: auto; }
+      body.intro-open .app { opacity: 1 !important; pointer-events: auto !important; }
+    </style>
+  </noscript>
+</head>
+<body class="intro-open">
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5L2.6 9.8l6.5-.9z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="m6 7 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h9a6 6 0 0 1 0 12h-3"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9h-9a6 6 0 0 0 0 12h3"/></symbol>
+    <symbol id="i-list-ul" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
+    <symbol id="i-list-ol" viewBox="0 0 24 24"><path d="M10 6h10M10 12h10M10 18h10"/><path d="M4 5h1v4M3.5 9H6"/><path d="M3.5 13.5c0-.8.6-1.3 1.3-1.3.8 0 1.2.5 1.2 1.1 0 1-2.5 1.6-2.5 3.2H6"/></symbol>
+    <symbol id="i-align-left" viewBox="0 0 24 24"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></symbol>
+    <symbol id="i-align-center" viewBox="0 0 24 24"><path d="M4 6h16M7 10h10M4 14h16M7 18h10"/></symbol>
+    <symbol id="i-align-right" viewBox="0 0 24 24"><path d="M4 6h16M10 10h10M4 14h16M10 18h10"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></symbol>
+    <symbol id="i-marker" viewBox="0 0 24 24"><path d="m9 14 6-6 3 3-6 6H9z"/><path d="M4 20h16"/></symbol>
+    <symbol id="i-clear" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/><path d="m17 17 4 4M21 17l-4 4"/></symbol>
+    <symbol id="i-hr" viewBox="0 0 24 24"><path d="M4 12h16"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 21h14"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 18l-6-6 6-6"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="m18.5 15 .7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3 10.5 13.5"/><path d="M21 3 14.5 21l-4-8-8-4z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></symbol>
+    <symbol id="i-corner" viewBox="0 0 24 24"><path d="m9 10-5 5 5 5"/><path d="M4 15h9a7 7 0 0 0 7-7V4"/></symbol>
+    <symbol id="i-replace" viewBox="0 0 24 24"><path d="M4 9a8 8 0 0 1 13-3l3 3"/><path d="M20 4v5h-5"/><path d="M20 15a8 8 0 0 1-13 3l-3-3"/><path d="M4 20v-5h5"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="m3 3 18 18"/><path d="M10.6 6.2A10 10 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3 3.7"/><path d="M6.2 7.4A16.6 16.6 0 0 0 2 12s3.5 6 10 6a10 10 0 0 0 4-.8"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 8.3-8 9-4.8-.7-8-4.5-8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 24 24"><path d="M15 4V2M15 10V8M12 6H10M20 6h-2M17.5 3.5 16 5M17.5 8.5 16 7M12.5 3.5 14 5M12.5 8.5 14 7"/><path d="M3 21 12 12"/><path d="m9 12 3 3"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9"/><path d="m17 6 2 2"/><path d="m14 9 2 2"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.6 6.8-4.1M8.6 13.4l6.8 4.1"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v2"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6z"/><path d="M12 15v6"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9z"/><circle cx="7.5" cy="7.5" r="1.5"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></symbol>
+  <symbol id="i-template" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+  <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6z"/></symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 14h.01M10 14h4M16 14h.01"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></symbol>
+  <symbol id="i-checklist" viewBox="0 0 24 24"><path d="m4 7 1.5 1.5L8 6M4 17l1.5 1.5L8 16"/><path d="M11 7h9M11 17h9"/></symbol>
+  </svg>
+
+  <div class="intro" id="intro" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+    <div class="intro-bg" aria-hidden="true">
+      <span class="intro-orb intro-orb-a"></span>
+      <span class="intro-orb intro-orb-b"></span>
+      <span class="intro-orb intro-orb-c"></span>
+      <span class="intro-grid"></span>
+      <span class="intro-particles"></span>
+      <span class="intro-sheet intro-sheet-a"></span>
+      <span class="intro-sheet intro-sheet-b"></span>
+      <span class="intro-sheet intro-sheet-c"></span>
+      <span class="intro-sheen"></span>
+    </div>
+
+    <div class="intro-inner">
+      <div class="intro-copy">
+        <div class="intro-mark" aria-hidden="true">
+          <span class="intro-ring"></span>
+          <span class="intro-ring intro-ring-2"></span>
+          <span class="intro-letter">N</span>
+        </div>
+
+        <h1 class="intro-title" id="intro-title">Notes</h1>
+        <p class="intro-tagline">Your private notebook. Every word stays on this PC.</p>
+
+        <button class="intro-cta" id="intro-open" type="button">
+          <span class="intro-open-icon" aria-hidden="true"><svg class="ic"><use href="#i-expand"/></svg></span>
+          <span class="intro-open-copy">
+            <strong>Click me to open Notes</strong>
+            <small>Opens big · full screen</small>
+          </span>
+          <span class="intro-open-arrow" aria-hidden="true"><svg class="ic"><use href="#i-arrow-right"/></svg></span>
+        </button>
+
+        <button class="intro-skip" id="intro-skip" type="button">Open in a window instead</button>
+
+        <p class="intro-hint"><span class="intro-dot" aria-hidden="true"></span> Press <kbd>Enter</kbd> to open</p>
+      </div>
+
+      <div class="intro-visual" aria-hidden="true">
+        <span class="intro-glow"></span>
+        <span class="intro-orbit intro-orbit-a"></span>
+        <span class="intro-orbit intro-orbit-b"></span>
+
+        <div class="intro-preview">
+          <div class="intro-preview-bar">
+            <span class="ip-dots"><i></i><i></i><i></i></span>
+            <span class="ip-app">Notes</span>
+            <span class="ip-saved"><i></i>Saved</span>
+          </div>
+          <div class="intro-preview-body">
+            <div class="ip-side">
+              <span class="ip-pill is-active"><i></i></span>
+              <span class="ip-pill"><i></i></span>
+              <span class="ip-pill"><i></i></span>
+              <span class="ip-pill short"><i></i></span>
+            </div>
+            <div class="ip-doc">
+              <span class="ip-heading"></span>
+              <span class="ip-line"></span>
+              <span class="ip-line"></span>
+              <span class="ip-line short"></span>
+              <span class="ip-quote"></span>
+              <span class="ip-line"></span>
+              <span class="ip-line short"></span>
+              <span class="ip-caret"></span>
+            </div>
+          </div>
+          <span class="intro-scan"></span>
+        </div>
+
+        <span class="intro-float intro-float-a"><svg class="ic"><use href="#i-star"/></svg><span>Starred</span></span>
+        <span class="intro-float intro-float-b"><svg class="ic"><use href="#i-lock"/></svg><span>Private</span></span>
+        <span class="intro-float intro-float-c"><svg class="ic"><use href="#i-check"/></svg><span>Autosaved</span></span>
+        <span class="intro-float intro-float-d"><svg class="ic"><use href="#i-sparkle"/></svg><span>AI ready</span></span>
+      </div>
+    </div>
+
+    <div class="intro-loader" id="intro-loader" role="status" aria-live="polite" hidden>
+      <span class="intro-loader-ring" aria-hidden="true">
+        <span class="intro-loader-core"><svg class="ic"><use href="#i-sparkle"/></svg></span>
+      </span>
+      <p class="intro-loader-title">Opening your notes…</p>
+      <div class="intro-loader-bar" aria-hidden="true"><span></span></div>
+      <p class="intro-loader-sub" id="intro-loader-sub">Getting things ready</p>
+    </div>
+
+    <p class="intro-meta" id="intro-meta">Private · stored on this PC</p>
+  </div>
+
+  <div class="app" id="app">
+    <aside class="sidebar" id="sidebar" aria-label="Notebook navigation">
+      <div class="sidebar-top">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">N</span>
+          <span>Notes</span>
+        </div>
+        <button class="icon-btn only-narrow" id="sidebar-close" type="button" aria-label="Close menu">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </div>
+
+      <button class="new-note" id="new-note" type="button">
+        <svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>
+        <span>New note</span>
+      </button>
+
+      <button class="ai-new" id="ai-generate" type="button">
+        <svg class="ic" aria-hidden="true"><use href="#i-wand"/></svg>
+        <span>Create with AI</span>
+      </button>
+
+      <div class="side-search">
+        <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="search" type="search" placeholder="Search notes and tags (/)" aria-label="Search notes and tags" autocomplete="off" title="Search notes and tags (press /)" />
+        <button class="search-clear" id="search-clear" type="button" aria-label="Clear search" hidden>
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </div>
+
+      <nav class="side-nav" id="side-nav" aria-label="Views">
+        <button class="nav-item" type="button" data-view="all">
+          <svg class="ic" aria-hidden="true"><use href="#i-file"/></svg>
+          <span>All notes</span>
+          <span class="nav-count" id="count-all">0</span>
+        </button>
+        <button class="nav-item" type="button" data-view="starred">
+          <svg class="ic" aria-hidden="true"><use href="#i-star"/></svg>
+          <span>Starred</span>
+          <span class="nav-count" id="count-starred">0</span>
+        </button>
+        <button class="nav-item" type="button" data-view="archive">
+          <svg class="ic" aria-hidden="true"><use href="#i-archive"/></svg>
+          <span>Archive</span>
+          <span class="nav-count" id="count-archive">0</span>
+        </button>
+        <button class="nav-item" type="button" data-view="trash">
+          <svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg>
+          <span>Trash</span>
+          <span class="nav-count" id="count-trash">0</span>
+        </button>
+      </nav>
+
+      <div class="folders-head">
+        <span>Folders</span>
+        <button class="icon-btn tiny" id="add-folder" type="button" title="New folder" aria-label="New folder">
+          <svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>
+        </button>
+      </div>
+      <div class="folder-list" id="folder-list"></div>
+
+      <div class="tags-block" id="tags-block" hidden>
+        <div class="tags-head">
+          <span>Tags</span>
+          <button class="text-btn tiny" id="tags-clear" type="button" hidden>Clear</button>
+        </div>
+        <div class="tag-list" id="tag-list"></div>
+      </div>
+
+      <div class="sidebar-bottom">
+        <button class="side-clock" id="clock-open" type="button" title="World Clock & Timer" aria-label="Open world clock and timer">
+          <span class="side-clock-face" aria-hidden="true">
+            <svg viewBox="0 0 48 48">
+              <circle class="sc-ring" cx="24" cy="24" r="21"></circle>
+              <circle class="sc-tick" cx="24" cy="5" r="1.3"></circle>
+              <circle class="sc-tick" cx="43" cy="24" r="1.3"></circle>
+              <circle class="sc-tick" cx="24" cy="43" r="1.3"></circle>
+              <circle class="sc-tick" cx="5" cy="24" r="1.3"></circle>
+              <line class="sc-hand sc-hour" id="side-clock-hour" x1="24" y1="24" x2="24" y2="14"></line>
+              <line class="sc-hand sc-min" id="side-clock-min" x1="24" y1="24" x2="24" y2="9"></line>
+              <line class="sc-hand sc-sec" id="side-clock-sec" x1="24" y1="24" x2="24" y2="7"></line>
+              <circle class="sc-pin" cx="24" cy="24" r="2"></circle>
+            </svg>
+          </span>
+          <span class="side-clock-text">
+            <span class="side-clock-time" id="side-clock-time">--:--:--</span>
+            <span class="side-clock-date" id="side-clock-date">Local time</span>
+          </span>
+          <span class="side-clock-add" aria-hidden="true">+</span>
+        </button>
+
+        <button class="side-action" id="palette-open" type="button" title="Quick actions (Ctrl+K)">
+          <svg class="ic" aria-hidden="true"><use href="#i-command"/></svg>
+          <span>Quick actions</span>
+        </button>
+        <button class="side-action" id="daily-note" type="button" title="Open today's note">
+          <svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg>
+          <span>Today's note</span>
+        </button>
+        <button class="side-action" id="export-all" type="button">
+          <svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>
+          <span>Export backup</span>
+        </button>
+        <label class="side-action" for="import-file">
+          <svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>
+          <span>Import backup</span>
+        </label>
+        <input id="import-file" type="file" accept=".json,application/json" hidden />
+        <button class="side-action" id="theme-toggle" type="button">
+          <svg class="ic" id="theme-icon" aria-hidden="true"><use href="#i-moon"/></svg>
+          <span id="theme-label">Dark mode</span>
+        </button>
+        <button class="side-action lang-action" id="lang-open" type="button" title="Language">
+          <svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg>
+          <span>Language</span>
+          <span class="lang-current" id="lang-current">English</span>
+        </button>
+        <p class="storage-note"><span id="doc-count">0 notes</span> · saved in this browser</p>
+      </div>
+    </aside>
+
+    <section class="list-pane" aria-label="Notes list">
+      <header class="list-head">
+        <button class="icon-btn only-narrow" id="sidebar-open" type="button" aria-label="Open menu">
+          <svg class="ic" aria-hidden="true"><use href="#i-menu"/></svg>
+        </button>
+        <div class="list-title-block">
+          <h1 id="list-title">All notes</h1>
+          <p id="list-sub">0 notes</p>
+        </div>
+        <div class="list-head-actions">
+          <button class="text-btn" id="empty-trash" type="button" hidden>Empty trash</button>
+          <select id="sort-select" class="sort-select" aria-label="Sort notes" title="Sort notes">
+            <option value="updated">Last edited</option>
+            <option value="created">Date created</option>
+            <option value="title">Title A–Z</option>
+            <option value="title-desc">Title Z–A</option>
+          </select>
+          <button class="icon-btn" id="new-template" type="button" title="New from template" aria-label="New note from template">
+            <svg class="ic" aria-hidden="true"><use href="#i-template"/></svg>
+          </button>
+          <button class="icon-btn" id="new-note-list" type="button" title="New note" aria-label="New note">
+            <svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="note-list" id="note-list"></div>
+
+      <div class="list-empty" id="list-empty" hidden>
+        <svg class="ic big" aria-hidden="true"><use href="#i-file"/></svg>
+        <h2 id="list-empty-title">No notes yet</h2>
+        <p id="list-empty-text">Create your first note to get started.</p>
+        <button class="btn primary" id="empty-new" type="button">Create a note</button>
+      </div>
+    </section>
+
+    <main class="editor-pane" id="editor-pane" aria-label="Editor">
+      <span class="editor-load" id="editor-load" aria-hidden="true"></span>
+      <span class="editor-spotlight" id="editor-spotlight" aria-hidden="true"></span>
+
+      <div class="editor-empty" id="editor-empty">
+        <svg class="ic big" aria-hidden="true"><use href="#i-file"/></svg>
+        <h2>Select a note</h2>
+        <p>Choose a note from the list, or create a new one.</p>
+        <button class="btn primary" id="start-new" type="button">New note</button>
+      </div>
+
+      <div class="editor-shell" id="editor-shell" hidden>
+        <header class="doc-head">
+          <button class="icon-btn only-narrow" id="back-list" type="button" aria-label="Back to notes">
+            <svg class="ic" aria-hidden="true"><use href="#i-back"/></svg>
+          </button>
+          <div class="doc-title-block">
+            <input id="doc-title" class="doc-title" type="text" placeholder="Untitled document" maxlength="200" aria-label="Note title" autocomplete="off" />
+            <div class="doc-subline">
+              <span id="save-status">Saved</span>
+              <span class="sep" aria-hidden="true">·</span>
+              <span id="word-count">0 words</span>
+              <span class="sep" aria-hidden="true">·</span>
+              <span id="read-time">0 min read</span>
+              <span class="sep" aria-hidden="true">·</span>
+              <span id="char-count">0 characters</span>
+              <span class="sep" aria-hidden="true">·</span>
+              <span id="doc-folder">No folder</span>
+            </div>
+            <div class="doc-tags" id="doc-tags" hidden></div>
+          </div>
+
+          <div class="doc-actions">
+            <button class="share-btn" id="share-open" type="button" title="Share this note" aria-label="Share this note">
+              <svg class="ic" aria-hidden="true"><use href="#i-share"/></svg>
+              <span class="share-btn-label">Share</span>
+            </button>
+            <button class="ai-trigger" id="ai-open" type="button" title="AI assistant (Ctrl+J)" aria-label="Open AI assistant" aria-expanded="false" aria-controls="ai-drawer">
+              <svg class="ic" aria-hidden="true"><use href="#i-sparkle"/></svg>
+              <span class="ai-trigger-label">AI</span>
+            </button>
+            <button class="icon-btn star-btn" id="star-btn" type="button" aria-pressed="false" title="Star note" aria-label="Star note">
+              <svg class="ic" aria-hidden="true"><use href="#i-star"/></svg>
+            </button>
+            <select id="folder-select" class="folder-select" aria-label="Move note to folder">
+              <option value="">No folder</option>
+            </select>
+            <details class="menu" id="doc-menu">
+              <summary class="icon-btn" aria-label="More actions" title="More actions">
+                <svg class="ic" aria-hidden="true"><use href="#i-dots"/></svg>
+              </summary>
+              <div class="menu-pop">
+                <button type="button" data-act="pin">Pin note</button>
+                <button type="button" data-act="tags">Edit tags…</button>
+                <button type="button" data-act="history">Version history…</button>
+                <button type="button" data-act="archive">Archive</button>
+                <button type="button" data-act="focus">Focus mode</button>
+                <button type="button" data-act="shortcuts">Keyboard shortcuts</button>
+                <div class="menu-sep" role="separator"></div>
+                <button type="button" data-act="print">Print</button>
+                <button type="button" data-act="export-html">Download as HTML</button>
+                <button type="button" data-act="export-txt">Download as text</button>
+                <button type="button" data-act="duplicate">Duplicate</button>
+                <button type="button" data-act="delete" class="danger">Move to trash</button>
+              </div>
+            </details>
+          </div>
+          <div class="read-progress" aria-hidden="true"><span id="read-progress-bar"></span></div>
+        </header>
+
+        <div class="toolbar" id="toolbar" role="toolbar" aria-label="Formatting">
+          <div class="tool-group">
+            <button class="tb" type="button" data-cmd="undo" title="Undo (Ctrl+Z)" aria-label="Undo">
+              <svg class="ic" aria-hidden="true"><use href="#i-undo"/></svg>
+            </button>
+            <button class="tb" type="button" data-cmd="redo" title="Redo (Ctrl+Y)" aria-label="Redo">
+              <svg class="ic" aria-hidden="true"><use href="#i-redo"/></svg>
+            </button>
+          </div>
+
+          <div class="tool-group">
+            <select id="block-format" class="block-select" aria-label="Text style">
+              <option value="p">Normal text</option>
+              <option value="h1">Heading 1</option>
+              <option value="h2">Heading 2</option>
+              <option value="h3">Heading 3</option>
+              <option value="blockquote">Quote</option>
+              <option value="pre">Code block</option>
+            </select>
+          </div>
+
+          <div class="tool-group">
+            <button class="tb" type="button" data-cmd="bold" title="Bold (Ctrl+B)" aria-label="Bold" aria-pressed="false"><b>B</b></button>
+            <button class="tb" type="button" data-cmd="italic" title="Italic (Ctrl+I)" aria-label="Italic" aria-pressed="false"><i>I</i></button>
+            <button class="tb" type="button" data-cmd="underline" title="Underline (Ctrl+U)" aria-label="Underline" aria-pressed="false"><u>U</u></button>
+            <button class="tb" type="button" data-cmd="strikeThrough" title="Strikethrough" aria-label="Strikethrough" aria-pressed="false"><s>S</s></button>
+          </div>
+
+          <div class="tool-group">
+            <button class="tb" type="button" data-cmd="insertUnorderedList" title="Bulleted list" aria-label="Bulleted list" aria-pressed="false">
+              <svg class="ic" aria-hidden="true"><use href="#i-list-ul"/></svg>
+            </button>
+            <button class="tb" type="button" data-cmd="insertOrderedList" title="Numbered list" aria-label="Numbered list" aria-pressed="false">
+              <svg class="ic" aria-hidden="true"><use href="#i-list-ol"/></svg>
+            </button>
+          </div>
+
+          <div class="tool-group">
+            <button class="tb" type="button" data-cmd="justifyLeft" title="Align left" aria-label="Align left" aria-pressed="false">
+              <svg class="ic" aria-hidden="true"><use href="#i-align-left"/></svg>
+            </button>
+            <button class="tb" type="button" data-cmd="justifyCenter" title="Align centre" aria-label="Align centre" aria-pressed="false">
+              <svg class="ic" aria-hidden="true"><use href="#i-align-center"/></svg>
+            </button>
+            <button class="tb" type="button" data-cmd="justifyRight" title="Align right" aria-label="Align right" aria-pressed="false">
+              <svg class="ic" aria-hidden="true"><use href="#i-align-right"/></svg>
+            </button>
+          </div>
+
+          <div class="tool-group">
+            <button class="tb" type="button" id="link-btn" title="Insert link (Ctrl+K)" aria-label="Insert link">
+              <svg class="ic" aria-hidden="true"><use href="#i-link"/></svg>
+            </button>
+            <label class="tb color-tb" title="Highlight colour">
+              <span class="color-dot" id="hilite-dot" style="--c:#fde68a" aria-hidden="true"></span>
+              <input type="color" id="hilite-color" value="#fde68a" aria-label="Highlight colour" />
+            </label>
+            <label class="tb color-tb" title="Text colour">
+              <span class="color-a" id="fore-dot" style="--c:#dc2626" aria-hidden="true">A</span>
+              <input type="color" id="fore-color" value="#dc2626" aria-label="Text colour" />
+            </label>
+          </div>
+
+          <div class="tool-group">
+            <button class="tb" type="button" data-cmd="removeFormat" title="Clear formatting" aria-label="Clear formatting">
+              <svg class="ic" aria-hidden="true"><use href="#i-clear"/></svg>
+            </button>
+            <button class="tb" type="button" data-cmd="insertHorizontalRule" title="Divider" aria-label="Insert divider">
+              <svg class="ic" aria-hidden="true"><use href="#i-hr"/></svg>
+            </button>
+          </div>
+
+          <div class="tool-group">
+            <button class="tb" type="button" id="spell-btn" title="Spell check" aria-label="Spell check" aria-pressed="false">
+              <svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="trash-banner" id="trash-banner" hidden>
+          <span>This note is in Trash.</span>
+          <button class="text-btn" id="restore-btn" type="button">Restore</button>
+          <button class="text-btn danger" id="purge-btn" type="button">Delete forever</button>
+        </div>
+
+        <div class="page-scroll" id="page-scroll">
+          <div class="page">
+            <div id="editor" class="doc-content" contenteditable="true" spellcheck="true" data-placeholder="Start writing…"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="ai-scrim" id="ai-scrim" hidden></div>
+
+  <aside class="ai-drawer" id="ai-drawer" aria-label="AI assistant" aria-hidden="true" hidden>
+    <div class="ai-progress" id="ai-progress" hidden><span></span></div>
+
+    <header class="ai-head">
+      <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-sparkle"/></svg></span>
+      <div class="ai-head-text">
+        <strong>AI Assistant</strong>
+        <span id="ai-model-badge">Not set up</span>
+      </div>
+      <button class="icon-btn" id="ai-settings-open" type="button" title="AI settings" aria-label="AI settings">
+        <svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>
+      </button>
+      <button class="icon-btn" id="ai-new-chat" type="button" title="New chat" aria-label="Start a new chat">
+        <svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>
+      </button>
+      <button class="icon-btn" id="ai-close" type="button" title="Close" aria-label="Close AI assistant">
+        <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+      </button>
+    </header>
+
+    <div class="ai-context" id="ai-context">
+      <span class="ai-context-dot" aria-hidden="true"></span>
+      <span class="ai-context-label" id="ai-context-label">No note selected</span>
+      <span class="ai-sel-pill" id="ai-sel-pill" hidden>Selection</span>
+    </div>
+
+    <div class="ai-quick" id="ai-quick">
+      <button class="chip" type="button" data-ai-action="summarise">Summarise</button>
+      <button class="chip" type="button" data-ai-action="keypoints">Key points</button>
+      <button class="chip" type="button" data-ai-action="improve">Improve</button>
+      <button class="chip" type="button" data-ai-action="grammar">Fix grammar</button>
+      <button class="chip" type="button" data-ai-action="continue">Continue</button>
+      <button class="chip" type="button" data-ai-action="translate">Translate</button>
+      <label class="ai-lang" title="Translation language">into
+        <select id="ai-lang" aria-label="Translation language">
+          <option>Spanish</option>
+          <option>French</option>
+          <option>German</option>
+          <option>Italian</option>
+          <option>Portuguese</option>
+          <option>Dutch</option>
+          <option>Arabic</option>
+          <option>Urdu</option>
+          <option>Hindi</option>
+          <option>Chinese (Simplified)</option>
+          <option>Japanese</option>
+          <option>Korean</option>
+          <option>Russian</option>
+          <option>Turkish</option>
+          <option>Polish</option>
+          <option>Indonesian</option>
+          <option>English</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="ai-transcript" id="ai-transcript">
+      <div class="ai-empty" id="ai-empty">
+        <span class="ai-orb" aria-hidden="true"><svg class="ic big"><use href="#i-sparkle"/></svg></span>
+        <h3>Your writing copilot</h3>
+        <p>Summarise, rewrite, translate, continue writing — or ask anything about this note.</p>
+        <button class="btn primary" id="ai-setup-cta" type="button">Connect OpenAI</button>
+      </div>
+    </div>
+
+    <form class="ai-composer" id="ai-form">
+      <textarea id="ai-input" rows="1" placeholder="Ask AI anything about this note…" aria-label="Message the AI"></textarea>
+      <button class="ai-send" id="ai-send" type="submit" title="Send" aria-label="Send">
+        <svg class="ic" aria-hidden="true"><use href="#i-send"/></svg>
+      </button>
+      <button class="ai-send stop" id="ai-stop" type="button" title="Stop generating" aria-label="Stop generating" hidden>
+        <svg class="ic" aria-hidden="true"><use href="#i-stop"/></svg>
+      </button>
+    </form>
+    <p class="ai-hint">Enter to send · Shift+Enter for a new line · AI can make mistakes</p>
+  </aside>
+
+  <div class="modal-backdrop" id="share-modal" hidden>
+    <div class="modal share-modal" role="dialog" aria-modal="true" aria-labelledby="share-title">
+      <header class="modal-head share-head">
+        <span class="share-mark" aria-hidden="true"><svg class="ic"><use href="#i-share"/></svg></span>
+        <div class="modal-head-text">
+          <h2 id="share-title">Share note</h2>
+          <p id="share-subtitle">Send a read-only copy of this note.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal="share-modal" aria-label="Close">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </header>
+
+      <div class="modal-body">
+        <div class="share-invite">
+          <label class="sr-only" for="share-email">Email address</label>
+          <input id="share-email" type="email" placeholder="Add people by email" autocomplete="off" spellcheck="false" />
+          <button class="btn primary" id="share-email-btn" type="button">
+            <svg class="ic" aria-hidden="true"><use href="#i-send"/></svg>
+            Email link
+          </button>
+        </div>
+        <p class="share-hint">Opens your email app with the link — this app has no server, so nothing is sent automatically.</p>
+
+        <div class="share-access">
+          <span class="share-access-icon" id="share-access-icon" aria-hidden="true">
+            <svg class="ic"><use href="#i-globe"/></svg>
+          </span>
+          <div class="share-access-text">
+            <strong id="share-access-title">Anyone with the link</strong>
+            <small id="share-access-desc">Can view the note.</small>
+          </div>
+          <label class="sr-only" for="share-access">General access</label>
+          <select id="share-access" class="share-access-select">
+            <option value="link">Viewer</option>
+            <option value="copy">Can save a copy</option>
+            <option value="password">Password protected</option>
+          </select>
+        </div>
+
+        <label class="field share-password" id="share-password-field" hidden>
+          <span>Password <small>share it separately</small></span>
+          <input id="share-password" type="password" placeholder="Choose a password (4+ characters)" autocomplete="new-password" />
+          <small>The note is encrypted with AES-256 in your browser. The password is never part of the link.</small>
+        </label>
+
+        <div class="share-link-row">
+          <svg class="ic" aria-hidden="true"><use href="#i-link"/></svg>
+          <label class="sr-only" for="share-link">Share link</label>
+          <input id="share-link" type="text" readonly spellcheck="false" placeholder="Creating link…" />
+          <button class="btn primary" id="share-copy" type="button">Copy link</button>
+        </div>
+
+        <p class="form-error" id="share-error" hidden></p>
+
+        <div class="share-actions">
+          <button class="btn" id="share-download" type="button">
+            <svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>
+            Download shareable file
+          </button>
+          <button class="btn" id="share-native" type="button" hidden>
+            <svg class="ic" aria-hidden="true"><use href="#i-share"/></svg>
+            Share…
+          </button>
+        </div>
+
+        <p class="security-note">
+          <svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>
+          <span>There is no cloud account: links open on this PC, or for anyone who has the Notes folder. The downloadable file opens anywhere — that is the safest way to share with other people.</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="ai-settings-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title">
+      <header class="modal-head">
+        <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-sparkle"/></svg></span>
+        <div class="modal-head-text">
+          <h2 id="ai-settings-title">AI settings</h2>
+          <p>Connect your OpenAI account. The key stays in this browser.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal="ai-settings-modal" aria-label="Close">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </header>
+
+      <div class="modal-body">
+        <div class="ai-status" id="ai-settings-status">Not connected</div>
+
+        <label class="field">
+          <span>OpenAI API key</span>
+          <div class="key-field">
+            <svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>
+            <input id="ai-key" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" />
+            <button class="icon-btn tiny" id="ai-key-toggle" type="button" aria-label="Show key" title="Show key">
+              <svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>
+            </button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span>Model</span>
+          <div class="model-field">
+            <input id="ai-model" type="text" list="ai-model-list" placeholder="gpt-4o-mini" autocomplete="off" spellcheck="false" />
+            <button class="btn small" id="ai-load-models" type="button">Load models</button>
+          </div>
+          <datalist id="ai-model-list">
+            <option value="gpt-4o-mini"></option>
+            <option value="gpt-4o"></option>
+            <option value="gpt-4.1-mini"></option>
+            <option value="gpt-4.1"></option>
+          </datalist>
+          <small id="ai-models-hint">Pick a model, or load the ones your key can use.</small>
+        </label>
+
+        <label class="field">
+          <span>Base URL <small>for OpenAI-compatible APIs</small></span>
+          <input id="ai-base" type="text" placeholder="https://api.openai.com/v1" spellcheck="false" autocomplete="off" />
+        </label>
+
+        <label class="field range-field">
+          <span>Creativity <output id="ai-temp-out">0.7</output></span>
+          <input id="ai-temp" type="range" min="0" max="1" step="0.1" value="0.7" />
+          <small>Lower is more precise, higher is more creative.</small>
+        </label>
+
+        <p class="security-note">
+          <svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>
+          <span>Your key is stored only in this browser and sent straight to the API. Anyone using this PC account could read it — use a key you can revoke, and never share this folder with the key saved.</span>
+        </p>
+
+        <p class="form-error" id="ai-settings-error" hidden></p>
+        <p class="form-ok" id="ai-settings-ok" hidden></p>
+      </div>
+
+      <footer class="modal-foot">
+        <button class="btn" type="button" id="ai-test">Test connection</button>
+        <button class="btn danger" type="button" id="ai-disconnect" hidden>Disconnect</button>
+        <span class="spacer"></span>
+        <button class="btn" type="button" data-close-modal="ai-settings-modal">Cancel</button>
+        <button class="btn primary" type="button" id="ai-save">Save</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="gen-modal" hidden>
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="gen-title">
+      <header class="modal-head">
+        <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-wand"/></svg></span>
+        <div class="modal-head-text">
+          <h2 id="gen-title">Create a note with AI</h2>
+          <p>Describe it, and the AI writes a formatted note for you.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal="gen-modal" aria-label="Close">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </header>
+
+      <div class="modal-body">
+        <label class="field">
+          <span>What is the note about?</span>
+          <textarea id="gen-prompt" rows="3" placeholder="e.g. A beginner's study guide to photosynthesis with key terms and a summary"></textarea>
+        </label>
+
+        <div class="gen-options">
+          <label class="field">
+            <span>Type</span>
+            <select id="gen-type">
+              <option>Article</option>
+              <option>Study guide</option>
+              <option>Meeting notes</option>
+              <option>To-do list</option>
+              <option>Brainstorm</option>
+              <option>Email</option>
+              <option>Story</option>
+              <option>Summary</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Tone</span>
+            <select id="gen-tone">
+              <option>Professional</option>
+              <option>Friendly</option>
+              <option>Casual</option>
+              <option>Academic</option>
+              <option>Persuasive</option>
+              <option>Simple</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Length</span>
+            <select id="gen-length">
+              <option>Short</option>
+              <option selected>Medium</option>
+              <option>Detailed</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="gen-preview" id="gen-preview" hidden>
+          <div class="gen-preview-head">
+            <span>Preview</span>
+            <span class="gen-status" id="gen-status">Writing…</span>
+          </div>
+          <div class="ai-rich" id="gen-preview-body"></div>
+        </div>
+
+        <p class="form-error" id="gen-error" hidden></p>
+      </div>
+
+      <footer class="modal-foot">
+        <span class="ai-usage" id="gen-usage"></span>
+        <span class="spacer"></span>
+        <button class="btn" type="button" data-close-modal="gen-modal">Cancel</button>
+        <button class="btn primary" type="button" id="gen-run">Generate</button>
+        <button class="btn primary" type="button" id="gen-create" hidden>Create note</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="shared-view" id="shared-view" hidden>
+    <header class="shared-bar">
+      <span class="shared-brand">
+        <svg class="ic" aria-hidden="true"><use href="#i-file"/></svg>
+        Notes
+      </span>
+      <span class="shared-badge" id="shared-badge">Read only</span>
+      <span class="spacer"></span>
+      <button class="btn small" id="shared-copy-note" type="button" hidden>Save a copy</button>
+      <button class="btn small" id="shared-open-app" type="button">Open Notes</button>
+    </header>
+
+    <main class="shared-page">
+      <div class="shared-doc" id="shared-doc" hidden>
+        <h1 id="shared-title"></h1>
+        <p class="shared-meta" id="shared-meta"></p>
+        <article class="doc-content shared-body" id="shared-body"></article>
+        <p class="shared-foot">Shared from <strong>Notes</strong> · saved on the sender's computer</p>
+      </div>
+
+      <div class="shared-locked" id="shared-locked" hidden>
+        <span class="shared-lock-icon" aria-hidden="true"><svg class="ic"><use href="#i-lock"/></svg></span>
+        <h1 id="shared-locked-title">This note is protected</h1>
+        <p id="shared-locked-text">Enter the password you were given to open it.</p>
+        <form class="shared-unlock" id="shared-unlock-form">
+          <label class="sr-only" for="shared-password">Password</label>
+          <input id="shared-password" type="password" placeholder="Password" autocomplete="current-password" />
+          <button class="btn primary" type="submit">Unlock</button>
+        </form>
+        <p class="form-error" id="shared-error" hidden></p>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="palette-modal" hidden>
+    <div class="modal palette" role="dialog" aria-modal="true" aria-labelledby="palette-title">
+      <h2 id="palette-title" class="sr-only">Quick actions</h2>
+      <div class="palette-head">
+        <svg class="ic" aria-hidden="true"><use href="#i-command"/></svg>
+        <input id="palette-input" type="text" placeholder="Search notes or run a command…" autocomplete="off" spellcheck="false" aria-label="Search notes or commands" />
+        <kbd>Esc</kbd>
+      </div>
+      <div class="palette-results" id="palette-results" role="listbox" aria-label="Results"></div>
+      <div class="palette-foot">
+        <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+        <span><kbd>↵</kbd> open</span>
+        <span class="palette-brand">Notes</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="shortcuts-modal" hidden>
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+      <header class="modal-head">
+        <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-keyboard"/></svg></span>
+        <div class="modal-head-text">
+          <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+          <p>Work faster without leaving the keyboard.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal="shortcuts-modal" aria-label="Close">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+        <div class="shortcut-grid">
+          <div class="shortcut-group">
+            <h3>Notes</h3>
+            <p class="shortcut-row"><span>New note</span><span class="sc-keys"><kbd>Alt</kbd><kbd>N</kbd></span></p>
+            <p class="shortcut-row"><span>Quick actions</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>K</kbd></span></p>
+            <p class="shortcut-row"><span>Save now</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>S</kbd></span></p>
+            <p class="shortcut-row"><span>Search notes</span><span class="sc-keys"><kbd>/</kbd></span></p>
+            <p class="shortcut-row"><span>Today's note</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd></span></p>
+          </div>
+          <div class="shortcut-group">
+            <h3>Writing</h3>
+            <p class="shortcut-row"><span>Bold / italic / underline</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>B</kbd><kbd>I</kbd><kbd>U</kbd></span></p>
+            <p class="shortcut-row"><span>Insert link</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>K</kbd></span></p>
+            <p class="shortcut-row"><span>Print note</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>P</kbd></span></p>
+            <p class="shortcut-row"><span>Focus mode</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F</kbd></span></p>
+            <p class="shortcut-row"><span>Shortcuts</span><span class="sc-keys"><kbd>?</kbd></span></p>
+          </div>
+          <div class="shortcut-group">
+            <h3>AI &amp; more</h3>
+            <p class="shortcut-row"><span>AI assistant</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>J</kbd></span></p>
+            <p class="shortcut-row"><span>Create with AI</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>N</kbd></span></p>
+            <p class="shortcut-row"><span>World clock &amp; timer</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd></span></p>
+            <p class="shortcut-row"><span>Close menus &amp; dialogs</span><span class="sc-keys"><kbd>Esc</kbd></span></p>
+          </div>
+        </div>
+      </div>
+      <footer class="modal-foot">
+        <span class="spacer"></span>
+        <button class="btn" type="button" data-close-modal="shortcuts-modal">Close</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="tags-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tags-title">
+      <header class="modal-head">
+        <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-tag"/></svg></span>
+        <div class="modal-head-text">
+          <h2 id="tags-title">Tags</h2>
+          <p>Group this note with a few short labels.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal="tags-modal" aria-label="Close">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+        <div class="tag-current" id="tag-current"></div>
+        <form class="tag-add" id="tag-form">
+          <input id="tag-input" type="text" placeholder="Add a tag and press Enter" maxlength="24" autocomplete="off" aria-label="New tag" />
+          <button class="btn primary" type="submit">Add</button>
+        </form>
+        <p class="clock-hint">Tags are searchable and appear in the sidebar for quick filtering.</p>
+        <div class="tag-suggest" id="tag-suggest"></div>
+      </div>
+      <footer class="modal-foot">
+        <span class="spacer"></span>
+        <button class="btn" type="button" data-close-modal="tags-modal">Done</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="history-modal" hidden>
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="history-title">
+      <header class="modal-head">
+        <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-history"/></svg></span>
+        <div class="modal-head-text">
+          <h2 id="history-title">Version history</h2>
+          <p>Restore an earlier version of this note.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal="history-modal" aria-label="Close">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+        <div class="history-list" id="history-list"></div>
+      </div>
+      <footer class="modal-foot">
+        <button class="btn" type="button" id="history-snapshot">Save version now</button>
+        <span class="spacer"></span>
+        <button class="btn" type="button" data-close-modal="history-modal">Close</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="template-modal" hidden>
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="template-title">
+      <header class="modal-head">
+        <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-template"/></svg></span>
+        <div class="modal-head-text">
+          <h2 id="template-title">New from template</h2>
+          <p>Start with a structure instead of a blank page.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal="template-modal" aria-label="Close">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+        <div class="template-grid" id="template-grid"></div>
+      </div>
+      <footer class="modal-foot">
+        <span class="spacer"></span>
+        <button class="btn" type="button" data-close-modal="template-modal">Cancel</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="clock-modal" hidden>
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="clock-title">
+      <header class="modal-head">
+        <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-clock"/></svg></span>
+        <div class="modal-head-text">
+          <h2 id="clock-title">World Clock & Timer</h2>
+          <p>Track time across countries, or run a countdown timer.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal="clock-modal" aria-label="Close">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </header>
+
+      <div class="modal-body">
+        <div class="clock-hero">
+          <span class="clock-hero-glow" aria-hidden="true"></span>
+          <span class="clock-hero-face" aria-hidden="true">
+            <svg viewBox="0 0 96 96">
+              <circle class="ch-ring" cx="48" cy="48" r="44"></circle>
+              <circle class="ch-inner" cx="48" cy="48" r="35"></circle>
+              <circle class="ch-tick" cx="48" cy="9" r="1.7"></circle>
+              <circle class="ch-tick" cx="87" cy="48" r="1.7"></circle>
+              <circle class="ch-tick" cx="48" cy="87" r="1.7"></circle>
+              <circle class="ch-tick" cx="9" cy="48" r="1.7"></circle>
+              <line class="ch-hand ch-hour" id="hero-clock-hour" x1="48" y1="48" x2="48" y2="27"></line>
+              <line class="ch-hand ch-min" id="hero-clock-min" x1="48" y1="48" x2="48" y2="18"></line>
+              <line class="ch-hand ch-sec" id="hero-clock-sec" x1="48" y1="48" x2="48" y2="14"></line>
+              <circle class="ch-pin" cx="48" cy="48" r="3"></circle>
+            </svg>
+          </span>
+          <div class="clock-hero-info">
+            <p class="clock-hero-kicker"><span class="clock-live-dot" aria-hidden="true"></span>Your local time</p>
+            <p class="clock-hero-time" id="hero-clock-time">--:--:--</p>
+            <p class="clock-hero-date" id="hero-clock-date">—</p>
+          </div>
+        </div>
+
+        <div class="clock-section">
+          <h3>World Clock</h3>
+          <div class="clock-list" id="clock-list">
+            <div class="clock-empty">No cities added yet. Add one below.</div>
+          </div>
+          <div class="clock-quick" id="clock-quick" aria-label="Quick add cities">
+            <button class="chip" type="button" data-city="New York" data-tz="America/New_York">New York</button>
+            <button class="chip" type="button" data-city="London" data-tz="Europe/London">London</button>
+            <button class="chip" type="button" data-city="Paris" data-tz="Europe/Paris">Paris</button>
+            <button class="chip" type="button" data-city="Dubai" data-tz="Asia/Dubai">Dubai</button>
+            <button class="chip" type="button" data-city="Mumbai" data-tz="Asia/Kolkata">Mumbai</button>
+            <button class="chip" type="button" data-city="Tokyo" data-tz="Asia/Tokyo">Tokyo</button>
+            <button class="chip" type="button" data-city="Sydney" data-tz="Australia/Sydney">Sydney</button>
+            <button class="chip" type="button" data-city="Los Angeles" data-tz="America/Los_Angeles">Los Angeles</button>
+          </div>
+          <div class="clock-add">
+            <input id="clock-city" type="text" placeholder="City name" maxlength="40" />
+            <select id="clock-tz" aria-label="Timezone"></select>
+            <button class="btn small" id="clock-add-btn">Add</button>
+          </div>
+          <p class="clock-hint">Pick your own cities — times update live and are saved in this browser.</p>
+        </div>
+
+        <div class="clock-section">
+          <h3>Timer</h3>
+          <div class="timer-stage">
+            <div class="timer-ring" id="timer-ring">
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <defs>
+                  <linearGradient id="timer-grad" x1="0" y1="0" x2="1" y2="1">
+                    <stop class="tg-a" offset="0"></stop>
+                    <stop class="tg-b" offset="1"></stop>
+                  </linearGradient>
+                </defs>
+                <circle class="timer-ring-track" cx="60" cy="60" r="52"></circle>
+                <circle class="timer-ring-progress" id="timer-ring-progress" cx="60" cy="60" r="52"></circle>
+              </svg>
+              <div class="timer-ring-inner">
+                <div class="timer-display" id="timer-display">00:00:00</div>
+                <span class="timer-state" id="timer-state">Ready</span>
+              </div>
+            </div>
+          </div>
+          <div class="timer-presets" id="timer-presets" aria-label="Timer presets">
+            <button class="chip" type="button" data-timer-preset="60">1 min</button>
+            <button class="chip" type="button" data-timer-preset="300">5 min</button>
+            <button class="chip" type="button" data-timer-preset="600">10 min</button>
+            <button class="chip" type="button" data-timer-preset="1500">25 min</button>
+          </div>
+          <div class="timer-inputs">
+            <input id="timer-h" type="number" min="0" max="99" placeholder="H" maxlength="2" aria-label="Hours" />
+            <input id="timer-m" type="number" min="0" max="59" placeholder="M" maxlength="2" aria-label="Minutes" />
+            <input id="timer-s" type="number" min="0" max="59" placeholder="S" maxlength="2" aria-label="Seconds" />
+          </div>
+          <div class="timer-controls">
+            <button class="btn" id="timer-start">Start</button>
+            <button class="btn" id="timer-pause" hidden>Pause</button>
+            <button class="btn danger" id="timer-reset">Reset</button>
+          </div>
+          <p class="clock-hint" id="timer-status" aria-live="polite"></p>
+        </div>
+      </div>
+
+      <footer class="modal-foot">
+        <span class="spacer"></span>
+        <button class="btn" data-close-modal="clock-modal">Close</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="lang-modal" hidden>
+    <div class="modal lang-modal" role="dialog" aria-modal="true" aria-labelledby="lang-title">
+      <header class="modal-head">
+        <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-globe"/></svg></span>
+        <div class="modal-head-text">
+          <h2 id="lang-title">Choose your language</h2>
+          <p>Interface language — your notes stay exactly as written.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal="lang-modal" aria-label="Close">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+        <div class="lang-search-wrap">
+          <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+          <input id="lang-search" type="search" placeholder="Search languages" aria-label="Search languages" autocomplete="off" />
+        </div>
+        <p class="lang-legend"><span class="lang-dot" aria-hidden="true"></span><span>Fully translated</span></p>
+        <div class="lang-list" id="lang-list" role="listbox" aria-label="All languages"></div>
+      </div>
+      <footer class="modal-foot">
+        <span class="spacer"></span>
+        <button class="btn" type="button" data-close-modal="lang-modal">Done</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="fx-layer" id="fx-layer" aria-hidden="true"></div>
+  <button class="focus-exit" id="focus-exit" type="button" title="Exit focus mode (Esc)" aria-label="Exit focus mode" hidden>
+    <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+    <span>Exit focus</span>
+  </button>
+  <div class="scrim" id="scrim"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div class="sr-only" id="live" aria-live="polite"></div>
+
+  <script src="assets/i18n.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
