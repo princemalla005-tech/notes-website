@@ -1,17 +1,16 @@
-﻿/* Notes — local-first document editor. Everything is stored in localStorage. */
+﻿/* Notes — private, multi-user document editor backed by the local encrypted API. */
 (function () {
   'use strict';
 
+  var api = window.NotesApi;
+  var PASSWORD_MIN = 6;
+
   var LS = {
-    docs: 'notes:docs',
-    folders: 'notes:folders',
     theme: 'notes:theme',
     selected: 'notes:selected',
-    ai: 'notes:ai',
     clocks: 'notes:clocks',
     spell: 'notes:spell',
     sort: 'notes:sort',
-    history: 'notes:history',
     lang: 'notes:lang'
   };
 
@@ -72,6 +71,47 @@
   var introMetaEl = $('intro-meta');
   var introLoaderEl = $('intro-loader');
   var introLoaderSubEl = $('intro-loader-sub');
+
+  /* Authentication + account UI */
+  var authScreen = $('auth-screen');
+  var authTabLogin = $('auth-tab-login');
+  var authTabRegister = $('auth-tab-register');
+  var authLoginForm = $('auth-login-form');
+  var authRegisterForm = $('auth-register-form');
+  var loginEmail = $('login-email');
+  var loginPassword = $('login-password');
+  var loginRemember = $('login-remember');
+  var loginSubmit = $('login-submit');
+  var loginError = $('auth-login-error');
+  var registerUsername = $('register-username');
+  var registerEmail = $('register-email');
+  var registerPassword = $('register-password');
+  var registerConfirm = $('register-confirm');
+  var registerSubmit = $('register-submit');
+  var registerError = $('auth-register-error');
+
+  var accountChip = $('account-chip');
+  var accountAvatar = $('account-avatar');
+  var accountName = $('account-name');
+  var accountEmail = $('account-email');
+  var profileModal = $('profile-modal');
+  var profileAvatar = $('profile-avatar');
+  var profileName = $('profile-name');
+  var profileEmail = $('profile-email');
+  var profileSince = $('profile-since');
+  var profileExport = $('profile-export');
+  var profileLogout = $('profile-logout');
+  var passwordForm = $('password-form');
+  var passwordCurrent = $('password-current');
+  var passwordNew = $('password-new');
+  var passwordConfirm = $('password-confirm');
+  var passwordSubmit = $('password-submit');
+  var passwordError = $('password-error');
+  var passwordOk = $('password-ok');
+
+  var currentUser = null;
+  var authBusy = false;
+  var authView = 'login';
 
   var listTitle = $('list-title');
   var listSub = $('list-sub');
@@ -233,9 +273,8 @@
   var sharedPasswordInput = $('shared-password');
   var sharedErrorEl = $('shared-error');
 
-  var docs = read(LS.docs, null);
-  var folders = read(LS.folders, []);
-  if (!Array.isArray(folders)) folders = [];
+  var docs = [];
+  var folders = [];
 
   /* ---------- Language ---------- */
 
@@ -511,6 +550,23 @@
   }
 
   function write(key, value) {
+    /* Note, folder, history and AI data are never written to browser storage. */
+    if (typeof key !== 'string' || !key) return false;
+
+    if (key === 'notes:docs') {
+      if (Array.isArray(value)) docs = value;
+      scheduleSync();
+      return true;
+    }
+    if (key === 'notes:folders') {
+      if (Array.isArray(value)) folders = value;
+      scheduleSync();
+      return true;
+    }
+    if (key === 'notes:history' || key === 'notes:ai' || key === 'notes:shareAccess') {
+      return true;
+    }
+
     try {
       localStorage.setItem(key, JSON.stringify(value));
       return true;
@@ -518,6 +574,193 @@
       writingError('Browser storage is full — export a backup before adding more.');
       return false;
     }
+  }
+
+  /* ---------- Server persistence ---------- */
+
+  var syncTimer = null;
+  var syncRunning = false;
+  var syncAgain = false;
+  var syncPromise = null;
+  var noteIndex = Object.create(null);
+  var folderIndex = Object.create(null);
+  var versionCache = [];
+  var versionCacheNoteId = null;
+
+  function writeDocs() {
+    scheduleSync();
+    return true;
+  }
+
+  function writeFolders() {
+    scheduleSync();
+    return true;
+  }
+
+  function noteSnapshot(note) {
+    return {
+      title: String(note.title || ''),
+      html: String(note.html || ''),
+      folderId: note.folderId || null,
+      starred: !!note.starred,
+      trashed: !!note.trashed,
+      pinned: !!note.pinned,
+      archived: !!note.archived,
+      tags: Array.isArray(note.tags) ? note.tags.slice() : [],
+      daily: note.daily || null
+    };
+  }
+
+  function sameSnapshot(a, b) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  function adoptServerNote(doc, serverNote) {
+    var oldId = doc.id;
+    doc.id = serverNote.id;
+    doc.title = String(serverNote.title || '');
+    doc.html = sanitizeHtml(serverNote.html || '');
+    doc.folderId = serverNote.folderId || null;
+    doc.starred = !!serverNote.starred;
+    doc.trashed = !!serverNote.trashed;
+    doc.pinned = !!serverNote.pinned;
+    doc.archived = !!serverNote.archived;
+    doc.tags = cleanTags(serverNote.tags);
+    doc.daily = serverNote.daily || null;
+    doc.createdAt = Number(serverNote.createdAt) || doc.createdAt;
+    doc.updatedAt = Number(serverNote.updatedAt) || doc.updatedAt;
+    noteIndex[serverNote.id] = noteSnapshot(doc);
+
+    if (oldId !== serverNote.id) {
+      if (state.selectedId === oldId) {
+        state.selectedId = serverNote.id;
+        persistSelected();
+      }
+      if (versionCacheNoteId === oldId) versionCacheNoteId = serverNote.id;
+    }
+  }
+
+  function syncFolders() {
+    var tasks = [];
+
+    folders.forEach(function (folder) {
+      if (!folder.id) folder.id = uid();
+      var known = folderIndex[folder.id];
+      if (!known) {
+        tasks.push(api.createFolder(folder.name).then(function (server) {
+          var oldId = folder.id;
+          folder.id = server.id;
+          folder.name = server.name;
+          folder.createdAt = server.createdAt;
+          folder.updatedAt = server.updatedAt;
+          folderIndex[server.id] = { name: server.name };
+          if (oldId !== server.id) {
+            docs.forEach(function (doc) {
+              if (doc.folderId === oldId) doc.folderId = server.id;
+            });
+            if (state.folderId === oldId) state.folderId = server.id;
+            renderFolders();
+            renderFolderSelect();
+          }
+        }));
+      } else if (known.name !== folder.name) {
+        tasks.push(api.renameFolder(folder.id, folder.name).then(function (server) {
+          folder.name = server.name;
+          folderIndex[folder.id] = { name: server.name };
+        }));
+      }
+    });
+
+    Object.keys(folderIndex).forEach(function (id) {
+      var stillThere = folders.some(function (folder) { return folder.id === id; });
+      if (stillThere) return;
+      tasks.push(
+        api.deleteFolder(id).catch(function (error) {
+          if (error.status !== 404) throw error;
+        })
+      );
+      delete folderIndex[id];
+    });
+
+    return Promise.all(tasks);
+  }
+
+  function syncNotes() {
+    var tasks = [];
+
+    docs.forEach(function (doc) {
+      if (!doc.id) doc.id = uid();
+      var snap = noteSnapshot(doc);
+      var known = noteIndex[doc.id];
+
+      if (!known) {
+        tasks.push(api.createNote(doc).then(function (server) {
+          adoptServerNote(doc, server);
+        }));
+        return;
+      }
+
+      if (!sameSnapshot(known, snap)) {
+        tasks.push(api.updateNote(doc.id, doc).then(function (server) {
+          adoptServerNote(doc, server);
+        }));
+      }
+    });
+
+    Object.keys(noteIndex).forEach(function (id) {
+      var stillThere = docs.some(function (doc) { return doc.id === id; });
+      if (stillThere) return;
+      tasks.push(
+        api.deleteNote(id).catch(function (error) {
+          if (error.status !== 404) throw error;
+        })
+      );
+      delete noteIndex[id];
+    });
+
+    return Promise.all(tasks);
+  }
+
+  function runSync() {
+    if (!currentUser) return Promise.resolve();
+    if (syncRunning) {
+      syncAgain = true;
+      return syncPromise || Promise.resolve();
+    }
+
+    syncRunning = true;
+    syncAgain = false;
+
+    syncPromise = syncFolders()
+      .then(syncNotes)
+      .then(function () {
+        syncRunning = false;
+        if (syncAgain) return runSync();
+        if (!dirty && saveStatus) setStatus('Saved ' + timeOfDay(Date.now()));
+      })
+      .catch(function (error) {
+        syncRunning = false;
+        handleApiError(error, 'Could not save your changes.');
+        if (syncAgain) {
+          syncAgain = false;
+          window.setTimeout(runSync, 1200);
+        }
+      })
+      .then(function (result) {
+        syncPromise = null;
+        return result;
+      });
+
+    return syncPromise;
+  }
+
+  function scheduleSync() {
+    if (!currentUser) return;
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = window.setTimeout(function () {
+      syncTimer = null;
+      runSync();
+    }, 180);
   }
 
   function persistSelected() {
@@ -664,65 +907,6 @@
   function countWords(text) {
     var matches = String(text || '').match(/\S+/g);
     return matches ? matches.length : 0;
-  }
-
-  /* ---------- Seed content ---------- */
-
-  function seedDocs() {
-    var now = Date.now();
-    docs = [
-      normalizeDoc({
-        id: 'welcome',
-        title: 'Welcome to Notes',
-        createdAt: now - 60000,
-        updatedAt: now - 60000,
-        html:
-          '<h1>Welcome to Notes</h1>' +
-          '<p>This is your private notebook. Everything you type is saved automatically in this browser — no account, no internet needed.</p>' +
-          '<h2>What you can do</h2>' +
-          '<ul>' +
-          '<li><strong>Write</strong> in the page like a document — headings, lists, links, colours and more.</li>' +
-          '<li><strong>Organise</strong> notes into folders, star the important ones, pin them to the top, and tag them for quick filtering.</li>' +
-          '<li><strong>Start faster</strong> from a template, open today’s daily note, or press <strong>Ctrl+K</strong> for Quick actions.</li>' +
-          '<li><strong>Archive</strong> notes you want out of the way, and restore an earlier draft from <strong>Version history</strong>.</li>' +
-          '<li><strong>Focus</strong> on one page with focus mode, then export or back up everything from the sidebar.</li>' +
-          '<li><strong>Ask AI</strong> to summarise, rewrite, translate, continue writing or create a new note. Connect an OpenAI key once in AI settings.</li>' +
-          '</ul>' +
-          '<blockquote>Tip: select text and press Ctrl+B, Ctrl+I or Ctrl+U to format it. Press Ctrl+J for the AI assistant.</blockquote>' +
-          '<h2>Start here</h2>' +
-          '<p>Rename this note, or press <strong>New note</strong> to begin. Your notes stay on this device.</p>'
-      }),
-      normalizeDoc({
-        id: 'shortcuts',
-        title: 'Keyboard shortcuts',
-        createdAt: now - 120000,
-        updatedAt: now - 120000,
-        html:
-          '<h1>Keyboard shortcuts</h1>' +
-          '<ul>' +
-          '<li><strong>Ctrl+B</strong> — bold</li>' +
-          '<li><strong>Ctrl+I</strong> — italic</li>' +
-          '<li><strong>Ctrl+U</strong> — underline</li>' +
-          '<li><strong>Ctrl+K</strong> — insert a link in the editor, or open Quick actions</li>' +
-          '<li><strong>Ctrl+Shift+P</strong> — open Quick actions from anywhere</li>' +
-          '<li><strong>Ctrl+S</strong> — save now</li>' +
-          '<li><strong>Ctrl+Shift+D</strong> — open today’s note</li>' +
-          '<li><strong>Ctrl+Shift+F</strong> — toggle focus mode</li>' +
-          '<li><strong>Ctrl+J</strong> — open or close the AI assistant</li>' +
-          '<li><strong>Ctrl+Alt+N</strong> — create a note with AI</li>' +
-          '<li><strong>Alt+N</strong> — new note</li>' +
-          '<li><strong>/</strong> — jump to search</li>' +
-          '<li><strong>?</strong> — show all keyboard shortcuts</li>' +
-          '<li><strong>Ctrl+P</strong> — print the note</li>' +
-          '<li><strong>Esc</strong> — leave focus mode and close menus or dialogs</li>' +
-          '</ul>' +
-          '<p>Autosave runs a moment after you stop typing, so you rarely need Ctrl+S.</p>'
-      })
-    ];
-    state.selectedId = docs[0].id;
-    write(LS.docs, docs);
-    write(LS.folders, folders);
-    persistSelected();
   }
 
   /* ---------- Date helpers ---------- */
@@ -952,7 +1136,7 @@
     if (!name) return;
 
     folders.push({ id: uid(), name: name });
-    write(LS.folders, folders);
+    writeFolders();
     renderFolders();
     renderFolderSelect();
     toast('Folder created');
@@ -965,7 +1149,7 @@
     if (!name) return;
 
     folder.name = name;
-    write(LS.folders, folders);
+    writeFolders();
     renderFolders();
     renderFolderSelect();
     if (selectedDoc()) docFolder.textContent = folderName(selectedDoc().folderId) || 'No folder';
@@ -986,8 +1170,8 @@
       state.folderId = null;
     }
 
-    write(LS.folders, folders);
-    write(LS.docs, docs);
+    writeFolders();
+    writeDocs();
     renderAll();
     renderEditor();
     toast('Folder deleted');
@@ -1382,7 +1566,7 @@
     };
 
     docs.unshift(doc);
-    write(LS.docs, docs);
+    writeDocs();
 
     if (state.view === 'trash' || state.view === 'starred' || state.view === 'archive') state.view = 'all';
     state.selectedId = doc.id;
@@ -1472,7 +1656,7 @@
     saveNow();
     doc.pinned = !doc.pinned;
     doc.updatedAt = Date.now();
-    write(LS.docs, docs);
+    writeDocs();
     renderAll();
     renderEditor();
     toast(doc.pinned ? 'Pinned to top' : 'Unpinned');
@@ -1484,7 +1668,7 @@
     saveNow();
     doc.archived = !doc.archived;
     doc.updatedAt = Date.now();
-    write(LS.docs, docs);
+    writeDocs();
 
     var hiddenNow = state.view === 'archive' ? !doc.archived : doc.archived;
     if (hiddenNow) selectFirstVisible();
@@ -1502,7 +1686,7 @@
 
     doc.folderId = folderId || null;
     doc.updatedAt = Date.now();
-    write(LS.docs, docs);
+    writeDocs();
 
     if (state.selectedId === doc.id) {
       folderSelect.value = doc.folderId || '';
@@ -1583,7 +1767,7 @@
     saveNow();
     doc.tags = next;
     doc.updatedAt = Date.now();
-    write(LS.docs, docs);
+    writeDocs();
     renderAll();
     renderDocTags(doc);
     renderTagModal();
@@ -1599,7 +1783,7 @@
 
     doc.tags = next;
     doc.updatedAt = Date.now();
-    write(LS.docs, docs);
+    writeDocs();
     renderAll();
     renderDocTags(doc);
     renderTagModal();
@@ -1608,57 +1792,32 @@
 
   /* Version history */
 
-  function historyAll() {
-    var raw = read(LS.history, null);
-    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  }
-
-  function dropHistory(ids) {
-    if (!ids || !ids.length) return;
-    var all = historyAll();
-    var changed = false;
-    ids.forEach(function (id) {
-      if (all[id]) {
-        delete all[id];
-        changed = true;
-      }
-    });
-    if (changed) write(LS.history, all);
-  }
-
   function snapshotDoc(doc, force) {
-    if (!doc) return;
-    var all = historyAll();
-    var list = Array.isArray(all[doc.id]) ? all[doc.id] : [];
+    if (!doc || !currentUser) return;
+    if (!doc.id || !noteIndex[doc.id]) return;
+
     var html = sanitizeHtml(doc.html || '');
     var title = String(doc.title || '');
     if (!html && !title) return;
 
-    var now = Date.now();
-    var last = list[0];
-    if (!force && last) {
-      if (last.html === html && last.title === title) return;
-      if (now - Number(last.at || 0) < 90000) return;
-    }
-
-    list.unshift({ at: now, title: title, html: html });
-    all[doc.id] = list.slice(0, 12);
-    write(LS.history, all);
+    api.createVersion(doc.id, title, html, !!force).catch(function (error) {
+      if (error && (error.status === 401 || error.status === 404)) return;
+      console.warn('[notes] could not save version:', error && error.message);
+    });
   }
 
-  function renderHistoryModal() {
-    if (!historyList) return;
-    var doc = selectedDoc();
-    historyList.replaceChildren();
-    if (!doc) return;
+  function historyEmpty(message) {
+    var empty = document.createElement('p');
+    empty.className = 'history-empty';
+    empty.textContent = message;
+    historyList.appendChild(empty);
+  }
 
-    var all = historyAll();
-    var list = Array.isArray(all[doc.id]) ? all[doc.id] : [];
+  function renderHistoryList(list) {
+    if (!historyList) return;
+    historyList.replaceChildren();
     if (!list.length) {
-      var empty = document.createElement('p');
-      empty.className = 'history-empty';
-      empty.textContent = 'No saved versions yet. Versions appear automatically as you edit, or you can save one now.';
-      historyList.appendChild(empty);
+      historyEmpty('No saved versions yet. Versions appear automatically as you edit, or you can save one now.');
       return;
     }
 
@@ -1671,7 +1830,7 @@
 
       var when = document.createElement('span');
       when.className = 'history-time';
-      when.textContent = new Date(entry.at).toLocaleString(locale(), {
+      when.textContent = new Date(entry.createdAt).toLocaleString(locale(), {
         month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
       });
       top.appendChild(when);
@@ -1716,33 +1875,75 @@
     });
   }
 
+  function renderHistoryModal() {
+    if (!historyList) return;
+    var doc = selectedDoc();
+    historyList.replaceChildren();
+    if (!doc) return;
+
+    if (versionCacheNoteId === doc.id) {
+      renderHistoryList(versionCache);
+      return;
+    }
+
+    var noteId = doc.id;
+    versionCache = [];
+    versionCacheNoteId = null;
+    historyEmpty('Loading versions…');
+
+    api.listVersions(noteId).then(function (versions) {
+      var current = selectedDoc();
+      if (!current || current.id !== noteId) return;
+      versionCache = versions;
+      versionCacheNoteId = noteId;
+      renderHistoryList(versions);
+    }).catch(function (error) {
+      if (versionCacheNoteId !== noteId) {
+        historyList.replaceChildren();
+        historyEmpty(error && error.message ? error.message : 'Could not load versions.');
+      }
+    });
+  }
+
   function openHistoryModal() {
-    if (!selectedDoc()) return;
+    var doc = selectedDoc();
+    if (!doc) return;
     saveNow();
-    renderHistoryModal();
     openModal('history-modal');
+    versionCache = [];
+    versionCacheNoteId = null;
+
+    var ready = noteIndex[doc.id] ? Promise.resolve() : runSync();
+    ready.then(function () {
+      if (!noteIndex[doc.id]) return null;
+      return api.createVersion(doc.id, doc.title, doc.html, true);
+    }).catch(function () {
+      return null;
+    }).then(function () {
+      renderHistoryModal();
+    });
   }
 
   function restoreVersion(index) {
     var doc = selectedDoc();
     if (!doc) return;
-    var all = historyAll();
-    var list = Array.isArray(all[doc.id]) ? all[doc.id] : [];
-    var entry = list[index];
+    if (versionCacheNoteId !== doc.id) return;
+    var entry = versionCache[index];
     if (!entry) return;
     if (!window.confirm('Restore this version? Your current text will be saved as a version first.')) return;
 
-    snapshotDoc(doc, true);
-    doc.title = entry.title || '';
-    doc.html = sanitizeHtml(entry.html || '');
-    doc.updatedAt = Date.now();
-    dirty = false;
-    write(LS.docs, docs);
-
-    renderAll();
-    renderEditor();
-    renderHistoryModal();
-    toast('Version restored');
+    api.restoreVersion(doc.id, entry.id).then(function (serverNote) {
+      adoptServerNote(doc, serverNote);
+      dirty = false;
+      renderAll();
+      renderEditor();
+      versionCache = [];
+      versionCacheNoteId = null;
+      renderHistoryModal();
+      toast('Version restored');
+    }).catch(function (error) {
+      handleApiError(error, 'Could not restore that version.');
+    });
   }
 
   /* Daily note */
@@ -1780,12 +1981,12 @@
         updatedAt: Date.now()
       });
       docs.unshift(doc);
-      write(LS.docs, docs);
+      writeDocs();
       snapshotDoc(doc, true);
     } else {
       doc.trashed = false;
       doc.archived = false;
-      write(LS.docs, docs);
+      writeDocs();
     }
 
     state.view = 'all';
@@ -1912,7 +2113,7 @@
       updatedAt: now
     });
     docs.unshift(doc);
-    write(LS.docs, docs);
+    writeDocs();
     snapshotDoc(doc, true);
 
     state.view = 'all';
@@ -1970,10 +2171,6 @@
       { label: 'Search notes', hint: '/', icon: 'search', run: function () { searchInput.focus(); searchInput.select(); } },
       { label: 'Toggle dark mode', hint: '', icon: 'moon', run: function () { themeToggle.click(); } },
       { label: 'World clock & timer', hint: 'Ctrl+Shift+T', icon: 'clock', run: openClockModal },
-      { label: 'AI assistant', hint: 'Ctrl+J', icon: 'sparkle', run: toggleAiDrawer },
-      { label: 'Create a note with AI', hint: 'Ctrl+Alt+N', icon: 'wand', run: function () {
-        if (aiReady()) openGenModal(); else openAiSettings();
-      } },
       { label: 'Pin or unpin this note', hint: '', icon: 'pin', run: togglePin },
       { label: 'Edit tags', hint: '', icon: 'tag', run: openTagsModal },
       { label: 'Version history', hint: '', icon: 'history', run: openHistoryModal },
@@ -2146,22 +2343,21 @@
     var doc = selectedDoc();
     if (!doc || !dirty) return;
 
+    if (!currentUser) return;
+
     doc.html = sanitizeHtml(editor.innerHTML);
     doc.updatedAt = Date.now();
 
-    if (write(LS.docs, docs)) {
-      dirty = false;
-      snapshotDoc(doc);
-      setStatus('Saved ' + timeOfDay(doc.updatedAt));
-      saveStatus.title = 'Last edited ' + new Date(doc.updatedAt).toLocaleString(locale());
-      saveStatus.classList.remove('flash');
-      void saveStatus.offsetWidth;
-      saveStatus.classList.add('flash');
-      renderList();
-      renderCounts();
-    } else {
-      writingError('Could not save — storage may be full.');
-    }
+    dirty = false;
+    writeDocs();
+    snapshotDoc(doc);
+    setStatus('Saving…');
+    saveStatus.title = 'Last edited ' + new Date(doc.updatedAt).toLocaleString(locale());
+    saveStatus.classList.remove('flash');
+    void saveStatus.offsetWidth;
+    saveStatus.classList.add('flash');
+    renderList();
+    renderCounts();
   }
 
   /* ---------- Formatting ---------- */
@@ -2267,7 +2463,7 @@
     saveNow();
     doc.trashed = true;
     doc.updatedAt = Date.now();
-    write(LS.docs, docs);
+    writeDocs();
 
     selectFirstVisible();
     renderAll();
@@ -2282,7 +2478,7 @@
     var wasArchived = doc.archived;
     doc.trashed = false;
     doc.updatedAt = Date.now();
-    write(LS.docs, docs);
+    writeDocs();
 
     state.view = wasArchived ? 'archive' : 'all';
     state.folderId = null;
@@ -2298,8 +2494,7 @@
     if (!window.confirm('Delete “' + (doc.title || 'Untitled') + '” forever? This cannot be undone.')) return;
 
     docs = docs.filter(function (d) { return d.id !== doc.id; });
-    write(LS.docs, docs);
-    dropHistory([doc.id]);
+    writeDocs();
 
     selectFirstVisible();
     renderAll();
@@ -2311,10 +2506,8 @@
     if (!docs.some(function (d) { return d.trashed; })) return;
     if (!window.confirm('Delete every note in Trash forever? This cannot be undone.')) return;
 
-    var purged = docs.filter(function (d) { return d.trashed; }).map(function (d) { return d.id; });
     docs = docs.filter(function (d) { return !d.trashed; });
-    write(LS.docs, docs);
-    dropHistory(purged);
+    writeDocs();
 
     if (!docs.some(function (d) { return d.id === state.selectedId; })) {
       state.selectedId = null;
@@ -2348,7 +2541,7 @@
     });
 
     docs.unshift(copy);
-    write(LS.docs, docs);
+    writeDocs();
 
     state.selectedId = copy.id;
     persistSelected();
@@ -2409,21 +2602,26 @@
   }
 
   function exportAll() {
+    if (!currentUser) return;
     saveNow();
-    var payload = {
-      app: 'notes',
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      folders: folders,
-      notes: docs
-    };
-    var stamp = new Date().toISOString().slice(0, 10);
-    download('notes-backup-' + stamp + '.json', JSON.stringify(payload, null, 2), 'application/json');
-    toast('Backup downloaded');
+    runSync()
+      .then(function () { return api.exportData(); })
+      .then(function (payload) {
+        var stamp = new Date().toISOString().slice(0, 10);
+        download(
+          'notes-backup-' + stamp + '.json',
+          JSON.stringify(payload, null, 2),
+          'application/json'
+        );
+        toast('Backup downloaded');
+      })
+      .catch(function (error) {
+        handleApiError(error, 'Could not export your notes.');
+      });
   }
 
   function importFile(file) {
-    if (!file) return;
+    if (!file || !currentUser) return;
 
     file.text().then(function (text) {
       var data;
@@ -2431,57 +2629,23 @@
         data = JSON.parse(text);
       } catch (e) {
         writingError('Could not read that backup file');
-        return;
+        return null;
       }
 
       var rawNotes = Array.isArray(data) ? data : (data && Array.isArray(data.notes) ? data.notes : null);
       if (!rawNotes) {
         writingError('That file is not a Notes backup');
-        return;
+        return null;
       }
 
-      var added = 0;
-      var updated = 0;
-
-      rawNotes.forEach(function (raw) {
-        if (!raw || typeof raw !== 'object') return;
-        var doc = normalizeDoc(raw);
-        var index = -1;
-        for (var i = 0; i < docs.length; i++) {
-          if (docs[i].id === doc.id) { index = i; break; }
-        }
-        if (index === -1) {
-          docs.push(doc);
-          added++;
-        } else {
-          docs[index] = doc;
-          updated++;
-        }
-      });
-
-      if (data && Array.isArray(data.folders)) {
-        data.folders.forEach(function (raw) {
-          if (!raw || typeof raw.name !== 'string' || !raw.name.trim()) return;
-          var id = raw.id ? String(raw.id) : uid();
-          var existing = folderById(id);
-          if (existing) existing.name = raw.name.trim().slice(0, 60);
-          else folders.push({ id: id, name: raw.name.trim().slice(0, 60) });
+      return api.importData(data).then(function (result) {
+        return loadWorkspace().then(function () {
+          var imported = result && result.imported ? result.imported : {};
+          toast('Imported ' + (Number(imported.notes) || 0) + ' notes');
         });
-      }
-
-      write(LS.docs, docs);
-      write(LS.folders, folders);
-
-      if (!docs.some(function (d) { return d.id === state.selectedId; })) {
-        state.selectedId = docs.length ? docs[0].id : null;
-        persistSelected();
-      }
-
-      renderAll();
-      renderEditor();
-      toast('Imported ' + added + ' new, ' + updated + ' updated');
-    }).catch(function () {
-      toast('Could not read that backup file');
+      });
+    }).catch(function (error) {
+      writingError(error && error.message ? error.message : 'Could not import that backup file');
     });
   }
 
@@ -2636,12 +2800,11 @@
   }
 
   function updateShareAccess() {
+    /* Sharing is disabled in this build. */
+    return;
+
     shareAccessMode = shareAccessSelect.value;
     var use = shareAccessIcon.querySelector('use');
-
-    if (shareAccessMode !== 'password') {
-      try { localStorage.setItem('notes:shareAccess', shareAccessMode); } catch (e) {}
-    }
 
     if (shareAccessMode === 'password') {
       if (use) use.setAttribute('href', '#i-lock');
@@ -2667,6 +2830,9 @@
   }
 
   function refreshShareLink() {
+    /* Sharing is disabled in this build. */
+    return;
+
     var doc = selectedDoc();
     if (!doc) return;
 
@@ -2727,6 +2893,9 @@
   }
 
   function openShareDialog() {
+    /* Sharing is disabled in this build. */
+    return;
+
     var doc = selectedDoc();
     if (!doc) {
       toast('Open a note first');
@@ -2748,10 +2917,6 @@
     shareOpenBtn.classList.remove('pulse');
     void shareOpenBtn.offsetWidth;
     shareOpenBtn.classList.add('pulse');
-    try {
-      var saved = localStorage.getItem('notes:shareAccess');
-      if (saved === 'copy' || saved === 'link') shareAccessSelect.value = saved;
-    } catch (e) {}
     updateShareAccess();
     updateNativeShare();
     openModal('share-modal');
@@ -2968,6 +3133,9 @@
   }
 
   function openSharedView(payload) {
+    /* Sharing is disabled in this build. */
+    return;
+
     hideIntroForShare();
     sharedPayload = payload;
     sharedSaveAllowed = payload.a === 'copy';
@@ -3015,6 +3183,9 @@
   }
 
   function saveSharedCopy() {
+    /* Sharing is disabled in this build. */
+    return;
+
     if (!sharedPayload || !sharedSaveAllowed) return;
 
     var now = Date.now();
@@ -3029,7 +3200,7 @@
     });
 
     docs.unshift(doc);
-    write(LS.docs, docs);
+    writeDocs();
     state.selectedId = doc.id;
     persistSelected();
     closeSharedView();
@@ -3039,6 +3210,9 @@
   }
 
   function initSharedViewer() {
+    /* URL-based sharing is disabled in this build. */
+    return false;
+
     var hash = location.hash || '';
     if (hash.indexOf('#share=') !== 0) return false;
 
@@ -3211,35 +3385,22 @@
     'When summarising, keep it tight and skimmable.';
 
   function aiConfig() {
-    var raw = read(LS.ai, null);
-    if (!raw || typeof raw !== 'object') raw = {};
+    /* AI is disabled in this build. Configuration is never read from or
+       written to browser storage. */
     return {
-      key: typeof raw.key === 'string' ? raw.key : '',
-      baseUrl: typeof raw.baseUrl === 'string' && raw.baseUrl ? raw.baseUrl.replace(/\/+$/, '') : 'https://api.openai.com/v1',
-      model: typeof raw.model === 'string' && raw.model ? raw.model : 'gpt-4o-mini',
-      temperature: typeof raw.temperature === 'number' ? raw.temperature : 0.7
+      key: '',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      temperature: 0.7
     };
   }
 
   function aiReady() {
-    var cfg = aiConfig();
-    return !!(cfg.key && cfg.model);
+    return false;
   }
 
   function aiUpdateBadge() {
-    var cfg = aiConfig();
-    var ready = aiReady();
-    aiModelBadge.textContent = ready ? cfg.model : 'Not set up';
-    aiModelBadge.title = ready ? 'Using ' + cfg.model : 'Add your OpenAI API key';
-    if (aiSetupCta) aiSetupCta.hidden = ready;
-    if (aiEmpty) {
-      var text = aiEmpty.querySelector('p');
-      if (text) {
-        text.textContent = ready
-          ? 'Ask anything about this note, or use a quick action above. Your note is the context.'
-          : 'Summarise, rewrite, translate, continue writing — or ask anything about this note.';
-      }
-    }
+    /* AI is disabled in this build. */
   }
 
   function aiSelection() {
@@ -3277,6 +3438,9 @@
   }
 
   function openAiDrawer() {
+    /* AI is disabled in this build. */
+    return;
+
     updateAiContext();
     aiUpdateBadge();
     aiDrawer.hidden = false;
@@ -3307,6 +3471,9 @@
   }
 
   function toggleAiDrawer() {
+    /* AI is disabled in this build. */
+    return;
+
     if (aiDrawer.classList.contains('open')) closeAiDrawer();
     else openAiDrawer();
   }
@@ -3372,6 +3539,9 @@
   }
 
   function openAiSettings() {
+    /* AI is disabled in this build. */
+    return;
+
     var cfg = aiConfig();
     aiKeyInput.value = cfg.key;
     aiKeyInput.type = 'password';
@@ -3425,6 +3595,9 @@
   }
 
   function aiLoadModels() {
+    /* AI is disabled in this build. */
+    return;
+
     var key = aiKeyInput.value.trim();
     var base = (aiBaseInput.value.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
     if (!key) {
@@ -3460,6 +3633,9 @@
   }
 
   function aiTestConnection() {
+    /* AI is disabled in this build. */
+    return;
+
     var key = aiKeyInput.value.trim();
     var base = (aiBaseInput.value.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
     if (!key) {
@@ -3483,6 +3659,9 @@
   }
 
   function aiSaveSettings() {
+    /* AI is disabled in this build. */
+    return;
+
     var key = aiKeyInput.value.trim();
     var base = (aiBaseInput.value.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '');
     var model = aiModelInput.value.trim() || 'gpt-4o-mini';
@@ -3506,9 +3685,9 @@
       model: model,
       temperature: Math.max(0, Math.min(1, temperature))
     };
-    if (!write(LS.ai, config)) return;
-
-    aiUpdateBadge();
+    /* AI configuration is never persisted in this build. */
+    void config;
+    return;
     aiSetStatus('Saved · ' + model, 'ok');
     aiDisconnectBtn.hidden = false;
     closeModal('ai-settings-modal');
@@ -3517,8 +3696,10 @@
   }
 
   function aiDisconnect() {
+    /* AI is disabled in this build. */
+    return;
+
     if (!window.confirm('Remove the saved API key from this browser?')) return;
-    try { localStorage.removeItem(LS.ai); } catch (e) {}
 
     aiKeyInput.value = '';
     aiModelInput.value = '';
@@ -3596,6 +3777,9 @@
   }
 
   function aiRunQuick(kind) {
+    /* AI is disabled in this build. */
+    return;
+
     if (!aiReady()) {
       openAiSettings();
       toast('Add your OpenAI API key first');
@@ -3638,6 +3822,9 @@
   }
 
   function aiSendMessage(prompt) {
+    /* AI is disabled in this build. */
+    return;
+
     if (!aiReady()) {
       openAiSettings();
       toast('Add your OpenAI API key first');
@@ -3663,6 +3850,9 @@
   }
 
   function aiRun(opts) {
+    /* AI is disabled in this build. */
+    return;
+
     aiLastRequest = opts;
     var token = ++aiRunToken;
     var ctx = opts.ctx;
@@ -4155,6 +4345,9 @@
   }
 
   function openGenModal() {
+    /* AI is disabled in this build. */
+    return;
+
     if (!aiReady()) {
       openAiSettings();
       toast('Add your OpenAI API key first');
@@ -4182,6 +4375,9 @@
   }
 
   function aiRunGenerate() {
+    /* AI is disabled in this build. */
+    return;
+
     if (!aiReady()) {
       openAiSettings();
       return;
@@ -4269,6 +4465,9 @@
   }
 
   function aiCreateGeneratedNote() {
+    /* AI is disabled in this build. */
+    return;
+
     if (!aiGenHtml.trim()) {
       toast('Generate a note first');
       return;
@@ -4292,7 +4491,7 @@
     };
 
     docs.unshift(doc);
-    write(LS.docs, docs);
+    writeDocs();
 
     if (state.view === 'trash' || state.view === 'starred' || state.view === 'archive') state.view = 'all';
     state.selectedId = doc.id;
@@ -5111,7 +5310,7 @@
     saveNow();
     doc.starred = !doc.starred;
     doc.updatedAt = Date.now();
-    write(LS.docs, docs);
+    writeDocs();
 
     if (state.view === 'starred' && !doc.starred) {
       state.view = 'all';
@@ -5140,7 +5339,7 @@
 
     doc.folderId = folderSelect.value || null;
     doc.updatedAt = Date.now();
-    write(LS.docs, docs);
+    writeDocs();
 
     docFolder.textContent = folderName(doc.folderId) || 'No folder';
     renderFolders();
@@ -5616,15 +5815,14 @@
     }
 
     if (mod && key === 'j') {
+      /* AI shortcuts are disabled in this build. */
       event.preventDefault();
-      toggleAiDrawer();
       return;
     }
 
     if (mod && event.altKey && key === 'n') {
+      /* AI shortcuts are disabled in this build. */
       event.preventDefault();
-      if (aiReady()) openGenModal();
-      else openAiSettings();
       return;
     }
 
@@ -5668,56 +5866,474 @@
     if (document.visibilityState === 'hidden' && dirty) saveNow();
   });
 
-  window.addEventListener('storage', function (event) {
-    if (event.key !== LS.docs || dirty) return;
-    var next = read(LS.docs, null);
-    if (!Array.isArray(next)) return;
-    docs = next.map(normalizeDoc);
-    if (!docs.some(function (d) { return d.id === state.selectedId; })) {
-      state.selectedId = docs.length ? docs[0].id : null;
-      persistSelected();
-    }
-    renderAll();
-    renderEditor();
-  });
-
   window.addEventListener('resize', function () {
     if (window.innerWidth > 760) document.body.classList.remove('show-editor');
   });
 
-  window.addEventListener('hashchange', function () {
-    if (location.hash.indexOf('#share=') === 0) {
-      hideIntroForShare();
-      initSharedViewer();
+  /* ---------- Authentication and account ---------- */
+
+  function setAuthError(el, message) {
+    if (!el) return;
+    el.textContent = message || '';
+    el.hidden = !message;
+  }
+
+  function setAuthBusy(busy) {
+    authBusy = !!busy;
+    if (loginSubmit) {
+      loginSubmit.disabled = authBusy;
+      loginSubmit.textContent = authBusy ? 'Signing in…' : 'Log in';
     }
-  });
+    if (registerSubmit) {
+      registerSubmit.disabled = authBusy;
+      registerSubmit.textContent = authBusy ? 'Creating account…' : 'Create account';
+    }
+    if (authTabLogin) authTabLogin.disabled = authBusy;
+    if (authTabRegister) authTabRegister.disabled = authBusy;
+  }
+
+  function updateAccountUI() {
+    var name = currentUser ? (currentUser.username || 'Account') : 'Account';
+    var email = currentUser ? (currentUser.email || '') : '';
+    var initial = name.trim().charAt(0).toUpperCase() || '?';
+
+    if (accountAvatar) accountAvatar.textContent = initial;
+    if (accountName) accountName.textContent = name;
+    if (accountEmail) accountEmail.textContent = email;
+    if (profileAvatar) profileAvatar.textContent = initial;
+    if (profileName) profileName.textContent = name;
+    if (profileEmail) profileEmail.textContent = email;
+    if (profileSince) {
+      var since = currentUser && Number(currentUser.createdAt);
+      profileSince.textContent = since
+        ? 'Member since ' + new Date(since).toLocaleDateString(locale(), {
+          year: 'numeric', month: 'long', day: 'numeric'
+        })
+        : '';
+    }
+  }
+
+  function showAuth(view) {
+    authView = view === 'register' ? 'register' : 'login';
+    if (authScreen) authScreen.hidden = false;
+    if (appEl) appEl.inert = true;
+    document.body.classList.add('intro-open');
+    if (introEl) introEl.hidden = true;
+
+    var loginActive = authView === 'login';
+    if (authTabLogin) {
+      authTabLogin.classList.toggle('is-active', loginActive);
+      authTabLogin.setAttribute('aria-selected', String(loginActive));
+    }
+    if (authTabRegister) {
+      authTabRegister.classList.toggle('is-active', !loginActive);
+      authTabRegister.setAttribute('aria-selected', String(!loginActive));
+    }
+    if (authLoginForm) authLoginForm.hidden = !loginActive;
+    if (authRegisterForm) authRegisterForm.hidden = loginActive;
+
+    setAuthError(loginError, '');
+    setAuthError(registerError, '');
+    window.setTimeout(function () {
+      var focusEl = loginActive ? loginEmail : registerUsername;
+      if (focusEl) focusEl.focus();
+    }, 60);
+  }
+
+  function hideAuth() {
+    if (authScreen) authScreen.hidden = true;
+    document.body.classList.remove('intro-open');
+    if (appEl) appEl.inert = false;
+  }
+
+  function handleAuthSuccess(user) {
+    currentUser = user || null;
+    updateAccountUI();
+    hideAuth();
+  }
+
+  function handleSignedOut() {
+    currentUser = null;
+    docs = [];
+    folders = [];
+    noteIndex = Object.create(null);
+    folderIndex = Object.create(null);
+    versionCache = [];
+    versionCacheNoteId = null;
+    dirty = false;
+
+    window.clearTimeout(saveTimer);
+    window.clearTimeout(syncTimer);
+    syncTimer = null;
+    syncRunning = false;
+    syncAgain = false;
+    syncPromise = null;
+
+    state.selectedId = null;
+    state.view = 'all';
+    state.folderId = null;
+    state.tag = null;
+    state.query = '';
+    if (searchInput) searchInput.value = '';
+    if (searchClear) searchClear.hidden = true;
+
+    document.querySelectorAll('.modal-backdrop.show').forEach(function (modal) {
+      closeModal(modal.id);
+    });
+
+    setAuthBusy(false);
+    updateAccountUI();
+    renderAll();
+    renderEditor();
+    showAuth('login');
+  }
+
+  function handleApiError(error, fallback) {
+    if (error && error.status === 401) {
+      handleSignedOut();
+      return;
+    }
+    var message = error && error.message ? error.message : fallback;
+    if (message) toast(message);
+  }
+
+  function loadWorkspace() {
+    if (!currentUser) return Promise.resolve();
+    setStatus('Loading…');
+
+    return Promise.all([api.listNotes(), api.listFolders()]).then(function (results) {
+      var serverNotes = results[0] || [];
+      var serverFolders = results[1] || [];
+
+      docs = serverNotes.map(normalizeDoc);
+      folders = serverFolders.map(function (folder) {
+        return {
+          id: String(folder.id),
+          name: String(folder.name || ''),
+          createdAt: Number(folder.createdAt) || Date.now(),
+          updatedAt: Number(folder.updatedAt) || Date.now()
+        };
+      });
+
+      noteIndex = Object.create(null);
+      folderIndex = Object.create(null);
+      docs.forEach(function (doc) { noteIndex[doc.id] = noteSnapshot(doc); });
+      folders.forEach(function (folder) { folderIndex[folder.id] = { name: folder.name }; });
+
+      state.view = 'all';
+      state.folderId = null;
+      state.tag = null;
+      state.query = '';
+      if (searchInput) searchInput.value = '';
+      if (searchClear) searchClear.hidden = true;
+
+      if (!docs.some(function (doc) { return doc.id === state.selectedId; })) {
+        var first = visibleDocs()[0];
+        state.selectedId = first ? first.id : null;
+        persistSelected();
+      }
+
+      versionCache = [];
+      versionCacheNoteId = null;
+
+      renderAll();
+      renderEditor();
+
+      if (introMetaEl) {
+        var liveCount = docs.filter(function (doc) { return !doc.trashed; }).length;
+        var storageNote = api.backend === 'supabase' ? 'synced to your account' : 'encrypted on this PC';
+        introMetaEl.textContent = tc('note', liveCount) + ' · ' + t('private') + ' · ' + t(storageNote);
+      }
+    }).catch(function (error) {
+      handleApiError(error, 'Could not load your notes.');
+      throw error;
+    });
+  }
+
+  function readLegacy(key) {
+    try {
+      var raw = localStorage.getItem(key);
+      return raw === null ? null : JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function removeLegacy(key) {
+    try { localStorage.removeItem(key); } catch (e) {}
+  }
+
+  function purgeLegacySecrets() {
+    /* Old builds could store an OpenAI key and share preference in plain text. */
+    removeLegacy('notes:ai');
+    removeLegacy('notes:shareAccess');
+    /* An earlier bug wrote note/folder/AI data under the literal key
+       "undefined". Remove it so nothing sensitive lingers in the browser. */
+    removeLegacy('undefined');
+  }
+
+  function migrateLegacyLocalData() {
+    var legacyDocs = readLegacy('notes:docs');
+    var legacyFolders = readLegacy('notes:folders');
+    var legacyHistory = readLegacy('notes:history');
+
+    if (!Array.isArray(legacyDocs)) legacyDocs = [];
+    var history = legacyHistory && typeof legacyHistory === 'object' && !Array.isArray(legacyHistory)
+      ? legacyHistory
+      : {};
+
+    var notes = legacyDocs.filter(function (doc) {
+      return doc && typeof doc === 'object';
+    }).slice(0, 1000);
+
+    /* Preserve orphaned history entries as recovered notes. */
+    if (!notes.length && Object.keys(history).length) {
+      Object.keys(history).forEach(function (id) {
+        var entries = Array.isArray(history[id]) ? history[id] : [];
+        var latest = entries[0];
+        if (latest && (latest.title || latest.html)) {
+          notes.push({
+            title: String(latest.title || 'Recovered note'),
+            html: String(latest.html || ''),
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          });
+        }
+      });
+    }
+
+    if (!notes.length) {
+      removeLegacy('notes:docs');
+      removeLegacy('notes:folders');
+      removeLegacy('notes:history');
+      return Promise.resolve(null);
+    }
+
+    var payload = {
+      app: 'notes',
+      version: 1,
+      folders: Array.isArray(legacyFolders) ? legacyFolders : [],
+      notes: notes
+    };
+
+    return api.importData(payload).then(function (result) {
+      var importedNotes = result && Array.isArray(result.notes) ? result.notes : [];
+      var versionTasks = [];
+      var versionFailed = false;
+
+      legacyDocs.forEach(function (doc) {
+        var entries = Array.isArray(history[doc && doc.id]) ? history[doc.id] : [];
+        if (!entries.length) return;
+
+        var title = String(doc.title || '');
+        var html = String(doc.html || '');
+        var match = importedNotes.filter(function (note) {
+          return note.title === title && note.html === html;
+        })[0] || importedNotes.filter(function (note) {
+          return note.title === title;
+        })[0];
+        if (!match) return;
+
+        entries.slice().reverse().forEach(function (entry) {
+          versionTasks.push(
+            api.createVersion(match.id, entry.title || '', entry.html || '', true)
+              .catch(function () { versionFailed = true; })
+          );
+        });
+      });
+
+      return Promise.all(versionTasks).then(function () {
+        removeLegacy('notes:docs');
+        removeLegacy('notes:folders');
+        if (!versionFailed) removeLegacy('notes:history');
+        return {
+          imported: Number(result && result.imported && result.imported.notes) || notes.length,
+          historyFailed: versionFailed
+        };
+      });
+    });
+  }
+
+  function afterSignIn(user) {
+    handleAuthSuccess(user);
+    return loadWorkspace()
+      .then(function () { return migrateLegacyLocalData(); })
+      .then(function (migration) {
+        if (!migration) return null;
+        return loadWorkspace().then(function () {
+          var count = migration.imported;
+          toast('Imported ' + count + ' old note' + (count === 1 ? '' : 's') + ' from this browser');
+        });
+      })
+      .catch(function (error) {
+        handleApiError(error, 'Could not load your notes.');
+      });
+  }
+
+  function openProfile() {
+    if (!currentUser) return;
+    updateAccountUI();
+    if (passwordForm) passwordForm.reset();
+    setAuthError(passwordError, '');
+    if (passwordOk) {
+      passwordOk.textContent = '';
+      passwordOk.hidden = true;
+    }
+    openModal('profile-modal');
+  }
+
+  function logout() {
+    if (authBusy) return;
+    setAuthBusy(true);
+    api.logout()
+      .catch(function () { /* Clear the local session even if the server is unreachable. */ })
+      .then(function () {
+        setAuthBusy(false);
+        handleSignedOut();
+        toast('Signed out');
+      });
+  }
+
+  if (authTabLogin) {
+    authTabLogin.addEventListener('click', function () { showAuth('login'); });
+  }
+  if (authTabRegister) {
+    authTabRegister.addEventListener('click', function () { showAuth('register'); });
+  }
+
+  if (authLoginForm) {
+    authLoginForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (authBusy) return;
+
+      var email = loginEmail ? loginEmail.value.trim() : '';
+      var password = loginPassword ? loginPassword.value : '';
+      if (!email || !password) {
+        setAuthError(loginError, 'Enter your email and password.');
+        return;
+      }
+
+      setAuthError(loginError, '');
+      setAuthBusy(true);
+      api.login(email, password, !!(loginRemember && loginRemember.checked))
+        .then(function (data) {
+          if (loginPassword) loginPassword.value = '';
+          return afterSignIn(data.user);
+        })
+        .catch(function (error) {
+          setAuthError(loginError, error && error.message ? error.message : 'Could not sign in.');
+        })
+        .then(function () { setAuthBusy(false); });
+    });
+  }
+
+  if (authRegisterForm) {
+    authRegisterForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (authBusy) return;
+
+      var username = registerUsername ? registerUsername.value.trim() : '';
+      var email = registerEmail ? registerEmail.value.trim() : '';
+      var password = registerPassword ? registerPassword.value : '';
+      var confirm = registerConfirm ? registerConfirm.value : '';
+
+      if (!username || username.length < 3) {
+        setAuthError(registerError, 'Choose a username with at least 3 characters.');
+        return;
+      }
+      if (!email) {
+        setAuthError(registerError, 'Enter your email address.');
+        return;
+      }
+      if (password.length < PASSWORD_MIN) {
+        setAuthError(registerError, 'Use a password with at least ' + PASSWORD_MIN + ' characters.');
+        return;
+      }
+      if (password !== confirm) {
+        setAuthError(registerError, 'Passwords do not match.');
+        return;
+      }
+
+      setAuthError(registerError, '');
+      setAuthBusy(true);
+      api.register(username, email, password, confirm)
+        .then(function (data) {
+          if (registerPassword) registerPassword.value = '';
+          if (registerConfirm) registerConfirm.value = '';
+          if (data && data.needsConfirmation) {
+            showAuth('login');
+            if (loginEmail) loginEmail.value = email;
+            setAuthError(loginError, 'Check your email to confirm your account, then sign in.');
+            toast('Confirmation email sent');
+            return null;
+          }
+          return afterSignIn(data.user);
+        })
+        .catch(function (error) {
+          setAuthError(registerError, error && error.message ? error.message : 'Could not create your account.');
+        })
+        .then(function () { setAuthBusy(false); });
+    });
+  }
+
+  if (accountChip) accountChip.addEventListener('click', openProfile);
+  if (profileLogout) profileLogout.addEventListener('click', logout);
+  if (profileExport) profileExport.addEventListener('click', exportAll);
+
+  if (passwordForm) {
+    passwordForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (!passwordSubmit) return;
+
+      var current = passwordCurrent ? passwordCurrent.value : '';
+      var next = passwordNew ? passwordNew.value : '';
+      var confirm = passwordConfirm ? passwordConfirm.value : '';
+
+      if (!current || !next) {
+        setAuthError(passwordError, 'Fill in all password fields.');
+        return;
+      }
+      if (next.length < PASSWORD_MIN) {
+        setAuthError(passwordError, 'Use a new password with at least ' + PASSWORD_MIN + ' characters.');
+        return;
+      }
+      if (next !== confirm) {
+        setAuthError(passwordError, 'New passwords do not match.');
+        return;
+      }
+
+      setAuthError(passwordError, '');
+      if (passwordOk) {
+        passwordOk.textContent = '';
+        passwordOk.hidden = true;
+      }
+      passwordSubmit.disabled = true;
+      api.changePassword(current, next, confirm)
+        .then(function () {
+          passwordForm.reset();
+          if (passwordOk) {
+            passwordOk.textContent = 'Password updated. Other sessions were signed out.';
+            passwordOk.hidden = false;
+          }
+          toast('Password updated');
+        })
+        .catch(function (error) {
+          setAuthError(passwordError, error && error.message ? error.message : 'Could not update your password.');
+        })
+        .then(function () { passwordSubmit.disabled = false; });
+    });
+  }
+
+  if (profileModal) {
+    profileModal.addEventListener('click', function (event) {
+      if (event.target === profileModal) closeModal('profile-modal');
+    });
+  }
 
   /* ---------- Boot ---------- */
 
   applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
-
-  if (!Array.isArray(docs)) {
-    seedDocs();
-  }
-
-  docs = docs.map(normalizeDoc);
-
-  docs.forEach(function (doc) {
-    if (doc.folderId && !folderById(doc.folderId)) doc.folderId = null;
-  });
-
-  if (!state.selectedId || !docs.some(function (d) { return d.id === state.selectedId; })) {
-    var first = visibleDocs()[0];
-    state.selectedId = first ? first.id : null;
-    persistSelected();
-  }
-
   applyLanguage(LANG, true);
-
-  renderAll();
-  renderEditor();
-  aiUpdateBadge();
-  updateAiContext();
 
   loadClocks();
   populateTZSelect();
@@ -5731,18 +6347,33 @@
     if (spellCheckEnabled) spellBtn.classList.add('tb-active');
   }
 
-  var sharedBoot = initSharedViewer();
+  purgeLegacySecrets();
 
-  if (sharedBoot) {
-    hideIntroForShare();
-  } else if (introEl) {
-    if (appEl) appEl.inert = true;
-    var liveCount = docs.filter(function (d) { return !d.trashed; }).length;
-    if (introMetaEl) {
-      introMetaEl.textContent = tc('note', liveCount) + ' · ' + t('private') + ' · ' + t('stored on this PC');
-    }
-    if (introLoaderSubEl) {
-      introLoaderSubEl.textContent = tc('ready', liveCount);
+  /* URL-based sharing is disabled: strip any legacy #share= fragment, including
+     one added after the page has already loaded. */
+  function stripShareHash() {
+    if (location.hash.indexOf('#share=') === 0) {
+      try {
+        history.replaceState(null, '', location.pathname + location.search);
+      } catch (e) {
+        location.hash = '';
+      }
     }
   }
+
+  window.addEventListener('hashchange', stripShareHash);
+  stripShareHash();
+
+  if (appEl) appEl.inert = true;
+  showAuth('login');
+
+  api.setUnauthorizedHandler(handleSignedOut);
+  api.me()
+    .then(function (data) { return afterSignIn(data.user); })
+    .catch(function (error) {
+      showAuth('login');
+      if (error && error.status !== 401) {
+        setAuthError(loginError, error.message || 'Could not connect to your notes service.');
+      }
+    });
 })();

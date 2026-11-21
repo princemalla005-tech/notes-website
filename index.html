@@ -3,17 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co" />
   <title>Notes</title>
   <meta name="description" content="A private notebook in your browser — rich text, folders, search, autosave and export." />
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="assets/styles.css" />
-  <script>
-    try {
-      var t = localStorage.getItem('notes:theme');
-      if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      document.documentElement.dataset.theme = t;
-    } catch (e) {}
-  </script>
+  <script src="assets/theme.js"></script>
   <noscript>
     <style>
       .intro { display: none !important; }
@@ -78,7 +73,73 @@
   <symbol id="i-checklist" viewBox="0 0 24 24"><path d="m4 7 1.5 1.5L8 6M4 17l1.5 1.5L8 16"/><path d="M11 7h9M11 17h9"/></symbol>
   </svg>
 
-  <div class="intro" id="intro" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+  <div class="auth" id="auth-screen" aria-labelledby="auth-title">
+    <div class="auth-bg" aria-hidden="true">
+      <span class="auth-orb auth-orb-a"></span>
+      <span class="auth-orb auth-orb-b"></span>
+      <span class="auth-grid"></span>
+    </div>
+
+    <main class="auth-card">
+      <header class="auth-brand">
+        <span class="brand-mark" aria-hidden="true">N</span>
+        <div>
+          <h1 id="auth-title">Notes</h1>
+          <p>Private notes, synced to your account.</p>
+        </div>
+      </header>
+
+      <div class="auth-tabs" role="tablist" aria-label="Account">
+        <button class="auth-tab is-active" id="auth-tab-login" type="button" role="tab" aria-selected="true" aria-controls="auth-login-form">Log in</button>
+        <button class="auth-tab" id="auth-tab-register" type="button" role="tab" aria-selected="false" aria-controls="auth-register-form">Create account</button>
+      </div>
+
+      <form class="auth-form" id="auth-login-form" novalidate>
+        <label class="field">
+          <span>Email</span>
+          <input id="login-email" type="email" autocomplete="email" spellcheck="false" required />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input id="login-password" type="password" autocomplete="current-password" required />
+        </label>
+        <label class="auth-check">
+          <input id="login-remember" type="checkbox" />
+          <span>Keep me signed in for 7 days</span>
+        </label>
+        <p class="form-error" id="auth-login-error" hidden></p>
+        <button class="btn primary auth-submit" id="login-submit" type="submit">Log in</button>
+      </form>
+
+      <form class="auth-form" id="auth-register-form" hidden novalidate>
+        <label class="field">
+          <span>Username</span>
+          <input id="register-username" type="text" autocomplete="username" minlength="3" maxlength="32" spellcheck="false" required />
+        </label>
+        <label class="field">
+          <span>Email</span>
+          <input id="register-email" type="email" autocomplete="email" spellcheck="false" required />
+        </label>
+        <label class="field">
+          <span>Password (6 or more characters)</span>
+          <input id="register-password" type="password" autocomplete="new-password" minlength="6" required />
+        </label>
+        <label class="field">
+          <span>Confirm password</span>
+          <input id="register-confirm" type="password" autocomplete="new-password" minlength="6" required />
+        </label>
+        <p class="form-error" id="auth-register-error" hidden></p>
+        <button class="btn primary auth-submit" id="register-submit" type="submit">Create account</button>
+      </form>
+
+      <p class="auth-note">
+        <svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>
+        Your notes are visible only to your account. Sign-in is handled securely.
+      </p>
+    </main>
+  </div>
+
+  <div class="intro" id="intro" role="dialog" aria-modal="true" aria-labelledby="intro-title" hidden>
     <div class="intro-bg" aria-hidden="true">
       <span class="intro-orb intro-orb-a"></span>
       <span class="intro-orb intro-orb-b"></span>
@@ -100,7 +161,7 @@
         </div>
 
         <h1 class="intro-title" id="intro-title">Notes</h1>
-        <p class="intro-tagline">Your private notebook. Every word stays on this PC.</p>
+        <p class="intro-tagline">Your private notebook. Ready when you are.</p>
 
         <button class="intro-cta" id="intro-open" type="button">
           <span class="intro-open-icon" aria-hidden="true"><svg class="ic"><use href="#i-expand"/></svg></span>
@@ -151,7 +212,7 @@
         <span class="intro-float intro-float-a"><svg class="ic"><use href="#i-star"/></svg><span>Starred</span></span>
         <span class="intro-float intro-float-b"><svg class="ic"><use href="#i-lock"/></svg><span>Private</span></span>
         <span class="intro-float intro-float-c"><svg class="ic"><use href="#i-check"/></svg><span>Autosaved</span></span>
-        <span class="intro-float intro-float-d"><svg class="ic"><use href="#i-sparkle"/></svg><span>AI ready</span></span>
+        <span class="intro-float intro-float-d"><svg class="ic"><use href="#i-check"/></svg><span>Synced</span></span>
       </div>
     </div>
 
@@ -164,7 +225,7 @@
       <p class="intro-loader-sub" id="intro-loader-sub">Getting things ready</p>
     </div>
 
-    <p class="intro-meta" id="intro-meta">Private · stored on this PC</p>
+    <p class="intro-meta" id="intro-meta">Private · synced to your account</p>
   </div>
 
   <div class="app" id="app">
@@ -179,12 +240,21 @@
         </button>
       </div>
 
+      <button class="account-chip" id="account-chip" type="button" title="Account and security" aria-label="Account and security">
+        <span class="account-avatar" id="account-avatar" aria-hidden="true">?</span>
+        <span class="account-meta">
+          <strong id="account-name">Account</strong>
+          <small id="account-email"></small>
+        </span>
+        <svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>
+      </button>
+
       <button class="new-note" id="new-note" type="button">
         <svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>
         <span>New note</span>
       </button>
 
-      <button class="ai-new" id="ai-generate" type="button">
+      <button class="ai-new" id="ai-generate" type="button" hidden>
         <svg class="ic" aria-hidden="true"><use href="#i-wand"/></svg>
         <span>Create with AI</span>
       </button>
@@ -284,7 +354,7 @@
           <span>Language</span>
           <span class="lang-current" id="lang-current">English</span>
         </button>
-        <p class="storage-note"><span id="doc-count">0 notes</span> · saved in this browser</p>
+        <p class="storage-note"><span id="doc-count">0 notes</span> · saved to your account</p>
       </div>
     </aside>
 
@@ -357,11 +427,11 @@
           </div>
 
           <div class="doc-actions">
-            <button class="share-btn" id="share-open" type="button" title="Share this note" aria-label="Share this note">
+            <button class="share-btn" id="share-open" type="button" title="Share this note" aria-label="Share this note" hidden>
               <svg class="ic" aria-hidden="true"><use href="#i-share"/></svg>
               <span class="share-btn-label">Share</span>
             </button>
-            <button class="ai-trigger" id="ai-open" type="button" title="AI assistant (Ctrl+J)" aria-label="Open AI assistant" aria-expanded="false" aria-controls="ai-drawer">
+            <button class="ai-trigger" id="ai-open" type="button" title="AI assistant (Ctrl+J)" aria-label="Open AI assistant" aria-expanded="false" aria-controls="ai-drawer" hidden>
               <svg class="ic" aria-hidden="true"><use href="#i-sparkle"/></svg>
               <span class="ai-trigger-label">AI</span>
             </button>
@@ -490,7 +560,7 @@
 
   <div class="ai-scrim" id="ai-scrim" hidden></div>
 
-  <aside class="ai-drawer" id="ai-drawer" aria-label="AI assistant" aria-hidden="true" hidden>
+  <aside class="ai-drawer" id="ai-drawer" aria-label="AI assistant" aria-hidden="true" hidden data-disabled="true">
     <div class="ai-progress" id="ai-progress" hidden><span></span></div>
 
     <header class="ai-head">
@@ -567,7 +637,7 @@
     <p class="ai-hint">Enter to send · Shift+Enter for a new line · AI can make mistakes</p>
   </aside>
 
-  <div class="modal-backdrop" id="share-modal" hidden>
+  <div class="modal-backdrop" id="share-modal" hidden data-disabled="true">
     <div class="modal share-modal" role="dialog" aria-modal="true" aria-labelledby="share-title">
       <header class="modal-head share-head">
         <span class="share-mark" aria-hidden="true"><svg class="ic"><use href="#i-share"/></svg></span>
@@ -641,7 +711,7 @@
     </div>
   </div>
 
-  <div class="modal-backdrop" id="ai-settings-modal" hidden>
+  <div class="modal-backdrop" id="ai-settings-modal" hidden data-disabled="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title">
       <header class="modal-head">
         <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-sparkle"/></svg></span>
@@ -713,7 +783,7 @@
     </div>
   </div>
 
-  <div class="modal-backdrop" id="gen-modal" hidden>
+  <div class="modal-backdrop" id="gen-modal" hidden data-disabled="true">
     <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="gen-title">
       <header class="modal-head">
         <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-wand"/></svg></span>
@@ -788,7 +858,7 @@
     </div>
   </div>
 
-  <div class="shared-view" id="shared-view" hidden>
+  <div class="shared-view" id="shared-view" hidden data-disabled="true">
     <header class="shared-bar">
       <span class="shared-brand">
         <svg class="ic" aria-hidden="true"><use href="#i-file"/></svg>
@@ -870,9 +940,7 @@
             <p class="shortcut-row"><span>Shortcuts</span><span class="sc-keys"><kbd>?</kbd></span></p>
           </div>
           <div class="shortcut-group">
-            <h3>AI &amp; more</h3>
-            <p class="shortcut-row"><span>AI assistant</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>J</kbd></span></p>
-            <p class="shortcut-row"><span>Create with AI</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>N</kbd></span></p>
+            <h3>More</h3>
             <p class="shortcut-row"><span>World clock &amp; timer</span><span class="sc-keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd></span></p>
             <p class="shortcut-row"><span>Close menus &amp; dialogs</span><span class="sc-keys"><kbd>Esc</kbd></span></p>
           </div>
@@ -882,6 +950,70 @@
         <span class="spacer"></span>
         <button class="btn" type="button" data-close-modal="shortcuts-modal">Close</button>
       </footer>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="profile-modal" hidden>
+    <div class="modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+      <header class="modal-head">
+        <span class="ai-mark" aria-hidden="true"><svg class="ic"><use href="#i-shield"/></svg></span>
+        <div class="modal-head-text">
+          <h2 id="profile-title">Account &amp; security</h2>
+          <p>Your notes are private to this account.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal="profile-modal" aria-label="Close">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </header>
+
+      <div class="modal-body">
+        <div class="profile-summary">
+          <span class="profile-avatar" id="profile-avatar" aria-hidden="true">?</span>
+          <div class="profile-identity">
+            <strong id="profile-name">Account</strong>
+            <small id="profile-email"></small>
+            <small id="profile-since"></small>
+          </div>
+        </div>
+
+        <section class="profile-section">
+          <h3>Change password</h3>
+          <form class="profile-form" id="password-form" novalidate>
+            <label class="field">
+              <span>Current password</span>
+              <input id="password-current" type="password" autocomplete="current-password" required />
+            </label>
+            <label class="field">
+              <span>New password (6 or more characters)</span>
+              <input id="password-new" type="password" autocomplete="new-password" minlength="6" required />
+            </label>
+            <label class="field">
+              <span>Confirm new password</span>
+              <input id="password-confirm" type="password" autocomplete="new-password" minlength="6" required />
+            </label>
+            <p class="form-error" id="password-error" hidden></p>
+            <p class="form-ok" id="password-ok" hidden></p>
+            <div class="profile-actions">
+              <button class="btn primary" id="password-submit" type="submit">Update password</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="profile-section">
+          <h3>Backup</h3>
+          <p class="profile-help">Download a copy of your notes and folders as JSON. Keep the file private. In local-server mode you can also run <code>npm run backup</code> for an encrypted database backup.</p>
+          <div class="profile-actions">
+            <button class="btn" id="profile-export" type="button">
+              <svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>
+              Download my notes
+            </button>
+            <button class="btn" id="profile-logout" type="button">
+              <svg class="ic" aria-hidden="true"><use href="#i-back"/></svg>
+              Log out
+            </button>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 
@@ -1102,6 +1234,10 @@
   <div class="sr-only" id="live" aria-live="polite"></div>
 
   <script src="assets/i18n.js"></script>
+  <script src="assets/api.js"></script>
+  <script src="assets/vendor/supabase.js"></script>
+  <script src="assets/config.js"></script>
+  <script src="assets/api-supabase.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>
